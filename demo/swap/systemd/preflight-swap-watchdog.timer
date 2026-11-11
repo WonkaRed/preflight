@@ -1,0 +1,12 @@
+[Unit]
+Description=Run preflight-swap-watchdog every 30 minutes
+
+[Timer]
+OnCalendar=*:00,30:00
+# A run missed while the machine was off happens at the next boot.
+Persistent=true
+AccuracySec=1min
+Unit=preflight-swap-watchdog.service
+
+[Install]
+WantedBy=timers.target

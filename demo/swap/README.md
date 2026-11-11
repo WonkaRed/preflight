@@ -67,7 +67,7 @@ The flip key's private half is public, so anyone can spend its allowance and the
 | a flip that goes through (either direction) | 27.6 Tgas | about 0.0027 NEAR |
 | a flip refused as too soon (a transaction that fails inside the switch) | 1.5 Tgas | 0.000146 NEAR, measured over three |
 
-The gas attached beyond what is burnt is refunded, to the balance and to the allowance. With the 20 s interval at most 180 flips an hour go through (about 0.5 NEAR an hour); refused flips are cheaper each (about 6,800 per NEAR) but come as fast as the RPC lets a script send them, so they are the real drain: 5 NEAR of allowance is about 34,000 refused flips. The numbers now: the switch holds 13.43 NEAR, of which 4.37 NEAR is locked by its storage (437,098 bytes: its own code and both builds), so 9.06 NEAR is spare; the flip key's allowance is 5 NEAR (4.975 after the flips since the second deployment). It is not the 30 NEAR that was aimed for: the testnet faucet (near-faucet.io, up to 2 NEAR a request) answered only some requests and none at all for a run of ten, so 9 NEAR spare is what the project's own testnet accounts and the faucet gave. That is about 18 hours of the worst case (a flip every 20 s, all accepted); the watchdog (next) is what keeps it going.
+The gas attached beyond what is burnt is refunded, to the balance and to the allowance. With the 20 s interval at most 180 flips an hour go through (about 0.5 NEAR an hour); refused flips are cheaper each (about 6,800 per NEAR) but come as fast as the RPC lets a script send them, so they are the real drain: 5 NEAR of allowance is about 34,000 refused flips. The numbers on 2026-11-11: the switch holds 58.19 NEAR, of which 4.37 NEAR is locked by its storage (437,098 bytes: its own code and both builds), so 53.82 NEAR is spare, all of it from the testnet faucet and the project's own testnet accounts; the flip key's allowance is 5 NEAR (4.958 after 15 flips). That is about 100 hours of the worst case (a flip every 20 s, all accepted); the watchdog (next) is what keeps it going.
 
 A function-call key's allowance cannot be raised in place; the watchdog replaces the key by itself (same public key, fresh allowance) in one transaction, so the page's key never changes.
 
@@ -86,7 +86,7 @@ It prints one line (`swap-watchdog <time> OK|FAIL | switch_spare=… chameleon_s
 | chameleon spare | 0.3 NEAR | the same, up to 1 NEAR; the contract itself never lets it fall under 0.5 NEAR, so this floor trips only if something else is wrong |
 | flip key allowance | 1 NEAR | `switch.preflight-guard.testnet` (`<dir>/switch.preflight-guard.testnet.key`) deletes and re-adds the same public key with 5 NEAR, in one transaction |
 
-Without `PREFLIGHT_TESTNET_KEYS` it only reads and reports. The funder is the parent account, which holds 1.09 NEAR now: past that, the line says FAIL and someone must send testnet NEAR to `preflight-guard.testnet` (the faucet, when it is up).
+Without `PREFLIGHT_TESTNET_KEYS` it only reads and reports. The funder is the parent account, which holds 0.31 NEAR now (the rest was moved to the switch): past that, the line says FAIL and someone must send testnet NEAR to `preflight-guard.testnet` (the faucet, when it is up).
 
 ## What a page needs
 
@@ -201,3 +201,7 @@ Every step is recorded in `deployment.json` as it happens, and a rerun skips the
 - The 20 s interval starts when `flip` is accepted, before the upgrade lands. If an upgrade ever took longer than that, a second flip could read a stale `live` and send the same build again: harmless, since the build is the one the first flip is already installing.
 - The sandbox tests build the contracts with the repository's wasm flags, not `make build`'s path remapping; the code is the same, the bytes (and hashes) differ.
 - The chameleon's treasury is `preflight-guard.testnet`; the vault is a demonstration and has no way to recover funds sent to it other than `withdraw`.
+
+## Keeping it alive
+
+`systemd/preflight-swap-watchdog.service` and `.timer` run the watchdog every 30 minutes (persistent, so a run missed while the machine was off happens at the next boot). Install: `cp systemd/preflight-swap-watchdog.* ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable --now preflight-swap-watchdog.timer`. The service points at this checkout (`WorkingDirectory=`), so move it with the checkout, and `PREFLIGHT_TESTNET_KEYS` at `~/.claude/secrets/survival-testnet`. When a run exits non-zero, the unit runs `pixelbot-notify "Preflight Swap watchdog could not repair | 0 | Survival"`; the watchdog's line is in `journalctl --user -u preflight-swap-watchdog`. The watchdog tops up the switch and the chameleon only from `preflight-guard.testnet`; when its line says the funder has nothing to give, fund that account first.

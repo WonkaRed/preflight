@@ -1,0 +1,13 @@
+[Unit]
+Description=Preflight Swap watchdog: keeps the live demo's gas, flip-key allowance and contracts funded (alerts through pixelbot-notify when it cannot)
+
+[Service]
+Type=oneshot
+# Exit 0 = healthy (after any repair), 1 = a floor could not be met. Either way the line it prints is in `journalctl --user -u preflight-swap-watchdog`.
+WorkingDirectory=%h/Desktop/Projects/Survival/preflight-worktrees/publish/demo/swap
+Environment=PATH=%h/.local/share/mise/installs/node/26/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PREFLIGHT_TESTNET_KEYS=%h/.claude/secrets/survival-testnet
+ExecStart=%h/.local/share/mise/installs/node/26/bin/npm run --silent watchdog
+# Runs after a failed start, a non-zero exit and a timeout alike. $$ keeps systemd from expanding the variable itself.
+ExecStopPost=/bin/sh -c '[ "$$SERVICE_RESULT" = success ] || pixelbot-notify "Preflight Swap watchdog could not repair | 0 | Survival"'
+TimeoutStartSec=10min
