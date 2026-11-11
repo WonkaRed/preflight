@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://test.rpc.fastnear.com; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://test.rpc.fastnear.com https://near-testnet.drpc.org; base-uri 'none'; form-action 'none'">
 <title>Preflight: verdicts keyed to the code, not the address</title>
 <meta name="description" content="One NEAR testnet address whose contract code flips between a vulnerable and a patched build. An allowlist by account id keeps saying allow; Preflight looks the verdict up by the hash of the deployed code. Also scans contract source in your browser.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -47,7 +47,7 @@
       </article>
     </div>
 
-    <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account we control, so this shows what each check keys on, not that a verdict is right.</p>
+    <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account we control, so this shows what each check keys on, not that a verdict is right. <span id="swap-source"></span></p>
   </section>
 
   <section class="intro">

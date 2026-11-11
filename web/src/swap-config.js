@@ -2,8 +2,10 @@
 // of the account ids or the key is empty the section shows the bundled recording (swap-recorded.json, built from
 // demo/swap/recorded.json) and says it is a recording, so an empty config never breaks the page.
 export const SWAP_CONFIG = {
-  // The NEAR testnet RPC the page reads and sends through. Its origin must also be in the page's connect-src (index.html).
-  rpcUrl: 'https://test.rpc.fastnear.com',
+  // The NEAR testnet RPC endpoints, in order of preference. Every request tries them in turn, starting with the one that
+  // answered last, because one endpoint throttles now and then (HTTP 429, which a browser reports as a CORS failure). Each
+  // origin must also be in the page's connect-src (index.html), and must send Access-Control-Allow-Origin on its answers.
+  rpcUrls: ['https://test.rpc.fastnear.com', 'https://near-testnet.drpc.org'],
   // Explorer for transaction and account links (`/tx/<hash>`, `/account/<id>`).
   explorerUrl: 'https://testnet.near.rocks',
 

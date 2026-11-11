@@ -35,9 +35,11 @@ export function fakeChain() {
     lag: 0, lagAfterSend: 0, target: null, // account reads that still show the old build after a swap (the deploy receipt lands later)
     sendErrors: [],  // JSON-RPC errors send_tx answers with, one per call, before it succeeds
     sendResult: null, // overrides a successful send_tx result
+    txResult: null, // what `tx` (look a transaction up by hash) answers; null is UNKNOWN_TRANSACTION
     upgradeFails: false, // the flip succeeds but the chameleon's upgrade does not: no new code, no count, no countdown
     down: false, accessKeyError: null, statusOverride: undefined, codeOverride: undefined,
     calls: [],
+    taken: new Set(),
   };
   const rpcError = (cause, info) => ({ error: { name: 'HANDLER_ERROR', cause: { name: cause, info } } });
   const view = (value) => ({ result: { result: utf8(value), logs: [], block_height: 1, block_hash: vector.tx.blockHash } });
@@ -51,14 +53,18 @@ export function fakeChain() {
       if (method === 'send_tx') {
         const error = chain.sendErrors.shift();
         if (error) return { error };
+        const done = { result: chain.sendResult ?? { final_execution_status: 'EXECUTED_OPTIMISTIC', status: { SuccessValue: '' } } };
+        if (chain.taken.has(params.signed_tx_base64)) return done; // the chain takes one signed transaction once, however often it is sent
+        chain.taken.add(params.signed_tx_base64);
         if (chain.upgradeFails) return { result: chain.sendResult }; // the switch's callback leaves everything as it was
         chain.target = chain.build === 'vulnerable' ? 'patched' : 'vulnerable';
         chain.lag = chain.lagAfterSend;
         if (chain.lag === 0) chain.build = chain.target;
         chain.flips += 1;
         chain.nextFlipMs = chain.nowMs + chain.minIntervalMs;
-        return { result: chain.sendResult ?? { final_execution_status: 'EXECUTED_OPTIMISTIC', status: { SuccessValue: '' } } };
+        return done;
       }
+      if (method === 'tx') return chain.txResult ? { result: chain.txResult } : rpcError('UNKNOWN_TRANSACTION', { requested_transaction_hash: params.tx_hash });
       const { request_type: type, account_id: account } = params;
       if (type === 'view_account') {
         const shown = chain.build;

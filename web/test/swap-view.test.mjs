@@ -116,7 +116,7 @@ test('empty and loading: no verdict word is invented, and the button is off', ()
 
 // ---- paint ---------------------------------------------------------------------------------------------------------
 
-const IDS = ['status', 'detail', 'address', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfBuild', 'pfHash', 'button', 'flips', 'tx'];
+const IDS = ['status', 'detail', 'source', 'address', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfBuild', 'pfHash', 'button', 'flips', 'tx'];
 function fakeSection() {
   const doc = fakeDocument();
   const els = Object.fromEntries(IDS.map((name) => [name, Object.assign(doc.createElement('div'), { textContent: '' })]));
@@ -191,4 +191,15 @@ test('mountSwap reads nothing while the tab is hidden, reads at once when it is 
     swap?.stop();
     for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete globalThis[name]; else globalThis[name] = value; }
   }
+});
+
+test('a read that failed keeps the live data with a quiet note, and the page names the endpoint it reads through', async () => {
+  const { state } = await liveState('vulnerable');
+  const live = view({ ...state, endpoint: 'near-testnet.drpc.org' });
+  assert.equal(live.source, 'Via near-testnet.drpc.org.');
+  assert.match(live.status.text, /^Live on NEAR testnet\. Every swap/);
+  const blip = view({ ...state, endpoint: 'near-testnet.drpc.org', reconnecting: true });
+  assert.match(blip.status.text, /^Live on NEAR testnet\. Reconnecting; what you see is from the last read\./);
+  assert.equal(blip.pf.word, 'BLOCK', 'the last live verdict stays');
+  assert.equal(view({ ...state, mode: 'recorded', reason: 'rpc-down', endpoint: null, recorded }).source, '', 'a recording names no endpoint');
 });

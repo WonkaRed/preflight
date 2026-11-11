@@ -15,7 +15,7 @@ const when = (state) => state.recorded?.recordedAt ?? '';
 
 const STATUS = {
   loading: () => 'Reading the chain.',
-  live: () => 'Live on NEAR testnet. Every swap is a real transaction.',
+  live: (state) => (state.reconnecting ? 'Live on NEAR testnet. Reconnecting; what you see is from the last read.' : 'Live on NEAR testnet. Every swap is a real transaction.'),
   recorded: (state) => ({
     'rpc-down': `Recorded on ${when(state)}, RPC unreachable. Nothing below is live.`,
     'cannot-pay': `Recorded on ${when(state)}. The demo key can no longer pay for swaps, so the button replays the recording. Nothing below is live.`,
@@ -76,6 +76,7 @@ export function viewModel(state, { now, explorerUrl }) {
   return {
     status: { tone: mode, text: STATUS[mode](state) },
     detail: state.reason === 'unconfigured' ? state.detail : '',
+    source: mode === 'live' && state.endpoint ? `Via ${state.endpoint}.` : '',
     address: address ?? 'no address yet',
     addressHref: address && isAccountId(address) ? `${explorerUrl}/account/${address}` : null,
     trust: address
@@ -94,6 +95,7 @@ export function paint(doc, els, model, { animate = false } = {}) {
   els.status.textContent = model.status.text;
   els.status.setAttribute('data-tone', model.status.tone);
   els.detail.textContent = model.detail;
+  els.source.textContent = model.source;
   els.address.replaceChildren(model.addressHref
     ? h(doc, 'a', { href: model.addressHref, target: '_blank', rel: 'noopener noreferrer' }, model.address)
     : model.address);
@@ -114,7 +116,7 @@ export function paint(doc, els, model, { animate = false } = {}) {
 }
 
 const IDS = {
-  status: 'swap-status', detail: 'swap-detail', address: 'swap-address', trustWord: 'trust-word', trustNote: 'trust-note',
+  status: 'swap-status', detail: 'swap-detail', source: 'swap-source', address: 'swap-address', trustWord: 'trust-word', trustNote: 'trust-note',
   pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfBuild: 'pf-build', pfHash: 'pf-hash',
   button: 'swap-button', flips: 'swap-flips', tx: 'swap-tx',
 };

@@ -26,7 +26,7 @@ make -C web test     # build, then run the tests
 | `src/github.js` | Public repository reader: one request for the commit the ref points at and one for that commit's file list (both api.github.com), then one raw.githubusercontent.com request per `.rs` and `Cargo.toml` file, all pinned to that commit (plus the `Cargo.toml` of each folder above a sub-path, where the workspace's build profile usually is). No token. Limits are in `LIMITS` (a file over 1 MB is never downloaded, manifests included) and every cut, and every skipped Git submodule, is shown to the visitor. |
 | `src/report.js` | Report validation, severity and verdict rules, and the DOM builders. Scan text reaches the page only as text nodes, after control and bidirectional characters are replaced. |
 | `src/near.js` | The little of NEAR the Swap needs, with no library: base58, Borsh for one function-call transaction, and an ed25519 signature from WebCrypto. `test/near.test.mjs` checks every byte against a transaction built and signed by near-api-js 7.4.0 (`test/data/swap-vector.json`). |
-| `src/swap.js` | The Swap's controller: reads the chameleon's code hash and the registry verdict over RPC, sends `flip`, polls, and falls back to the recording when the RPC is down or the demo key can no longer pay; reads every 5 s for two minutes after load, a click or the tab coming back, then every 15 s, and never in a hidden tab. Config validation (`readConfig`) and the recording parser (`parseRecorded`) live here. No DOM. |
+| `src/swap.js` | The Swap's controller: reads the chameleon's code hash and the registry verdict over RPC (every request goes through one transport that fails over between the endpoints; see below), sends `flip`, polls, and falls back to the recording when the RPC is down or the demo key can no longer pay; reads every 5 s for two minutes after load, a click or the tab coming back, then every 15 s, and never in a hidden tab. Config validation (`readConfig`) and the recording parser (`parseRecorded`) live here. No DOM. |
 | `src/swap-view.js` | `viewModel` (state to plain strings, tested directly), `paint` (writes them into the section as text) and `mountSwap`. |
 | `src/swap-config.js` | The one place the Swap is configured; see below. |
 | `swap-recorded.json` (in `dist/`) | A copy of `../demo/swap/recorded.json`, written by `tools/build.mjs` (the JSON `null` when the file is absent). |
@@ -55,7 +55,8 @@ Fill `src/swap-config.js`, then `make -C web build`. With `chameleonId`, `switch
 | `flipKey` | `ed25519:` secret key, public on purpose: a function-call key limited to `flip` with a small allowance. |
 | `flipSignerId` | The account that holds that key; empty means `switchId`. |
 | `flipGasTgas` | Gas attached to `flip` (default 150; the switch needs at least 100). |
-| `rpcUrl`, `explorerUrl` | NEAR testnet RPC (also named in the page's CSP) and the explorer behind every link. |
+| `rpcUrls` | NEAR testnet RPC endpoints, in order of preference (each origin also in the page's CSP, and each must send `Access-Control-Allow-Origin`). A request tries them in turn, starting with the one that answered last, and moves on at once after a network error, a CORS-shaped failure (a throttled 429 carries no CORS header, so the browser reports a network failure), a 5xx, or an answer that is not NEAR's JSON-RPC. Only when all fail in one round does a read pause 400 ms and go round once more; a transaction is sent as the same signed bytes to each endpoint and, when no answer comes back, looked up by its hash before anything is called failed. |
+| `explorerUrl` | The explorer behind every link. |
 
 `status()` is read as `{ vulnerable: { code_hash }, patched: { code_hash }, flips, next_flip_ms }` and the registry's `get_verdict(code_hash)` as `{ code_hash, status: Safe | Warn | Unsafe, rule_ids }` or `null`. The page checks the code hash by hashing `view_code` itself, so a wrong answer from the RPC cannot show a verdict for code that is not deployed. A hash with no verdict shows WARN, as the guard does.
 
@@ -70,7 +71,7 @@ raw.githubusercontent.com, whose limits GitHub does not publish), so about 30 sc
 
 Everything a scan returns, and everything GitHub sends, is untrusted. The code has no `innerHTML`, and the page's
 Content-Security-Policy allows scripts and styles from the page's own folder only and network requests to the page's
-folder, `api.github.com`, `raw.githubusercontent.com` and the Swap's RPC, `test.rpc.fastnear.com`. No fonts, scripts or images come from anywhere else. The policy is a
+folder, `api.github.com`, `raw.githubusercontent.com` and the Swap's RPC endpoints, `test.rpc.fastnear.com` and `near-testnet.drpc.org`. No fonts, scripts or images come from anywhere else. The policy is a
 `<meta>` tag, which a worker script does not inherit: a host that can set response headers should send the same policy as a
 `Content-Security-Policy` header too (the worker is loaded from the page's own folder and makes no requests).
 

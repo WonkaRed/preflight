@@ -29,12 +29,12 @@ test('everything the page loads is in dist, and nothing is loaded from elsewhere
   const present = readdirSync(DIST);
   for (const name of wanted) assert.ok(present.includes(name), `${name} is referenced but not in dist`);
   const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
-  assert.match(csp, /connect-src 'self' https:\/\/api\.github\.com https:\/\/raw\.githubusercontent\.com https:\/\/test\.rpc\.fastnear\.com;/);
-  assert.ok(csp.includes(`connect-src 'self' ${'https://api.github.com https://raw.githubusercontent.com'} ${new URL(SWAP_CONFIG.rpcUrl).origin};`), 'the Swap\'s RPC origin is allowed by the CSP');
+  const connect = csp.match(/connect-src ([^;]+);/)[1].split(' ');
+  assert.deepEqual(connect, ["'self'", 'https://api.github.com', 'https://raw.githubusercontent.com', ...SWAP_CONFIG.rpcUrls.map((url) => new URL(url).origin)], 'the Swap\'s RPC origins, and only they, are allowed by the CSP');
   assert.match(csp, /^default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'/);
   for (const name of sources) {
     const hosts = [...read(SRC, name).matchAll(/https?:\/\/([\w.-]+)/g)].map((m) => m[1]);
-    for (const host of hosts) assert.ok(['api.github.com', 'raw.githubusercontent.com', 'github.com', 'test.rpc.fastnear.com', 'testnet.near.rocks'].includes(host), `${name} mentions ${host}`);
+    for (const host of hosts) assert.ok(['api.github.com', 'raw.githubusercontent.com', 'github.com', 'test.rpc.fastnear.com', 'near-testnet.drpc.org', 'testnet.near.rocks'].includes(host), `${name} mentions ${host}`);
   }
   assert.doesNotMatch(read(SRC, 'style.css'), /@import|url\(/);
 });
@@ -100,6 +100,6 @@ test('the Swap config is either empty, so the page shows the recording, or compl
   const required = ['chameleonId', 'switchId', 'registryId', 'flipKey'];
   const filled = required.filter((key) => SWAP_CONFIG[key] !== '');
   assert.ok(filled.length === 0 || filled.length === required.length, `half-filled Swap config: ${filled}`);
-  assert.equal(new URL(SWAP_CONFIG.rpcUrl).protocol, 'https:');
+  assert.ok(SWAP_CONFIG.rpcUrls.length >= 2 && SWAP_CONFIG.rpcUrls.every((url) => new URL(url).protocol === 'https:'), 'two or more https endpoints, so one throttled endpoint is survivable');
   if (filled.length) assert.ok(parseRecorded(JSON.parse(read(DIST, 'swap-recorded.json'))), 'a live Swap needs demo/swap/recorded.json for the fallback');
 });

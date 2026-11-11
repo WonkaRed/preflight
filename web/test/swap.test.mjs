@@ -37,8 +37,8 @@ test('an unset config and no recording is the empty state, not an error', async 
 
 test('readConfig names every empty or malformed field, defaults the signer to the switch, and converts gas', () => {
   assert.deepEqual(readConfig(UNSET_CONFIG).missing, ['chameleonId', 'switchId', 'registryId', 'flipKey']);
-  assert.deepEqual(readConfig({ ...CONFIG, chameleonId: 'Not An Id', flipKey: 'ed25519:abc', rpcUrl: 'http://x', flipGasTgas: 0, flipSignerId: '..' }).missing,
-    ['chameleonId', 'flipSignerId', 'flipKey', 'rpcUrl', 'flipGasTgas']);
+  assert.deepEqual(readConfig({ ...CONFIG, chameleonId: 'Not An Id', flipKey: 'ed25519:abc', rpcUrls: ['http://x'], flipGasTgas: 0, flipSignerId: '..' }).missing,
+    ['chameleonId', 'flipSignerId', 'flipKey', 'rpcUrls', 'flipGasTgas']);
   const ok = readConfig(CONFIG);
   assert.equal(ok.ok, true);
   assert.equal(ok.flipSignerId, CONFIG.switchId);
@@ -79,7 +79,7 @@ test('live: the vulnerable build is BLOCK with its rule, read by the hash of the
   assert.equal(state().flips, 3);
   const lookup = chain.calls.find((c) => c.params?.method_name === 'get_verdict');
   assert.deepEqual(JSON.parse(Buffer.from(lookup.params.args_base64, 'base64')), { code_hash: HASH.vulnerable }, 'the registry is asked about the hash');
-  assert.ok(chain.calls.every((c) => c.url === CONFIG.rpcUrl));
+  assert.ok(chain.calls.every((c) => CONFIG.rpcUrls.includes(c.url)));
 });
 
 test('live: the patched build is ALLOW', async () => {
@@ -388,4 +388,144 @@ test('polling slows down two minutes after the last interaction, and a click or 
   assert.equal(await tick(), IDLE_POLL_MS);
   await swap.wake();
   assert.equal(await tick(), POLL_MS, 'the tab coming back: fast again');
+});
+
+// ---- Endpoint failover ---------------------------------------------------------------------------------------------
+
+const [A, B] = CONFIG.rpcUrls;
+const REJECTS = { cors: () => Promise.reject(new TypeError('Failed to fetch')), // a 429 has no CORS header: fetch rejects
+  server: () => Promise.resolve({ ok: false, status: 503, json: async () => ({}) }),
+  throttled: () => Promise.resolve({ ok: true, status: 200, json: async () => ({ message: 'Request timeout on the free plan', code: 30 }) }) };
+
+/** A fetch that sends each request to the fake chain unless `behave(url, method, params)` names a way for it to fail ('cors', 'server', 'throttled', 'lost' = the node took it but the answer never came, or a JSON-RPC error object). */
+function endpoints(chain, behave) {
+  const log = [];
+  const fetch = (url, init) => {
+    const { method, params } = JSON.parse(init.body);
+    log.push({ url, method, params });
+    const how = behave(url, method, params);
+    if (how === undefined) return chain.fetch(url, init);
+    if (how === 'lost') return chain.fetch(url, init).then(REJECTS.cors);
+    if (typeof how === 'string') return REJECTS[how]();
+    return Promise.resolve({ ok: true, status: 200, json: async () => ({ jsonrpc: '2.0', id: 'x', error: how }) });
+  };
+  return { fetch, log, to: (url, method) => log.filter((c) => c.url === url && (!method || c.method === method)) };
+}
+
+test('an endpoint that is throttled (no CORS header), down or out of quota is skipped at once, and the one that worked is tried first next time', async () => {
+  for (const how of ['cors', 'server', 'throttled', { name: 'INTERNAL_ERROR', code: -32603 }]) {
+    const chain = fakeChain();
+    const net = endpoints(chain, (url) => (url === A ? how : undefined));
+    const { swap, state } = setup(chain, { env: { fetch: net.fetch } });
+    await swap.refresh();
+    assert.deepEqual([state().mode, state().build, state().endpoint], ['live', 'vulnerable', new URL(B).hostname], JSON.stringify(how));
+    const triedA = net.to(A).length;
+    await swap.refresh();
+    assert.equal(net.to(A).length, triedA, 'the second read starts at the endpoint that worked');
+  }
+});
+
+test('an answer from the chain itself is final: it is not shopped around the other endpoints', async () => {
+  const chain = fakeChain();
+  chain.accessKeyError = 'UNKNOWN_ACCESS_KEY';
+  const net = endpoints(chain, () => undefined);
+  const { swap } = setup(chain, { env: { fetch: net.fetch } });
+  await swap.refresh();
+  await swap.flip();
+  assert.equal(net.to(B).length, 0, 'the first endpoint answered every request, even the refusal');
+});
+
+test('when every endpoint fails, reads go round once more after a pause, and only then is the RPC called unreachable', async () => {
+  const chain = fakeChain();
+  const net = endpoints(chain, () => 'cors');
+  const sleeps = [];
+  const { swap, state } = setup(chain, { env: { fetch: net.fetch, sleep: async (ms) => { sleeps.push(ms); } } });
+  await swap.refresh();
+  assert.deepEqual([state().mode, state().reason], ['recorded', 'rpc-down']);
+  assert.ok(sleeps.length > 0 && sleeps.every((ms) => ms === 400), 'one pause per request, 400 ms');
+  assert.equal(net.to(A, 'block').length, 2, 'the endpoint was tried in both rounds');
+  assert.equal(net.to(B, 'block').length, 2);
+});
+
+test('live data stays on screen with a reconnecting note for two failed reads, and a third falls back to the recording', async () => {
+  const chain = fakeChain();
+  const { swap, state } = setup(chain);
+  await swap.refresh();
+  assert.equal(state().reconnecting, false);
+  chain.down = true;
+  await swap.refresh();
+  assert.deepEqual([state().mode, state().reconnecting, state().build], ['live', true, 'vulnerable']);
+  await swap.refresh();
+  assert.deepEqual([state().mode, state().reconnecting], ['live', true]);
+  chain.down = false;
+  await swap.refresh();
+  assert.deepEqual([state().mode, state().reconnecting], ['live', false], 'one good read ends the note');
+  chain.down = true;
+  for (let i = 0; i < 2; i++) await swap.refresh();
+  assert.equal(state().mode, 'live', 'the count started over');
+  await swap.refresh();
+  assert.deepEqual([state().mode, state().reason, state().reconnecting], ['recorded', 'rpc-down', false]);
+});
+
+test('from the recording the page keeps trying quietly and returns to live data by itself', async () => {
+  const chain = fakeChain();
+  chain.down = true;
+  const { swap, state, states } = setup(chain);
+  await swap.refresh();
+  assert.equal(state().mode, 'recorded');
+  await swap.flip();
+  assert.equal(state().replay, 1, 'the button replays meanwhile');
+  chain.down = false;
+  await swap.refresh();
+  assert.deepEqual([state().mode, state().reason, state().build], ['live', null, 'vulnerable']);
+  assert.ok(states.every((s) => s.reconnecting === false || s.mode === 'live'));
+});
+
+test('a swap sent while the first endpoint fails goes to the next endpoint as the identical signed bytes, signed once', async () => {
+  const chain = fakeChain();
+  const net = endpoints(chain, (url, method) => (url === A && method === 'send_tx' ? 'cors' : undefined));
+  const { swap, state } = setup(chain, { env: { fetch: net.fetch } });
+  await swap.refresh();
+  await swap.flip();
+  const sent = net.log.filter((c) => c.method === 'send_tx');
+  assert.deepEqual(sent.map((c) => c.url), [A, B], 'tried the first endpoint, then the next');
+  assert.equal(new Set(sent.map((c) => c.params.signed_tx_base64)).size, 1, 'the same bytes everywhere');
+  assert.equal(net.log.filter((c) => c.method === 'query' && c.params.request_type === 'view_access_key').length, 1, 'one nonce read, one signature');
+  assert.equal(state().tx.stage, 'done');
+});
+
+test('a swap whose answer was lost is looked up by its hash before anything is called failed', async () => {
+  const chain = fakeChain();
+  const net = endpoints(chain, (url, method) => (method === 'send_tx' ? 'lost' : undefined));
+  const { swap, state } = setup(chain, { env: { fetch: net.fetch } });
+  await swap.refresh();
+  chain.txResult = { final_execution_status: 'EXECUTED', status: { SuccessValue: '' } };
+  await swap.flip();
+  assert.equal(net.log.filter((c) => c.method === 'send_tx').length, 2, 'both endpoints were given the same transaction');
+  assert.ok(net.log.some((c) => c.method === 'tx' && c.params.tx_hash === state().tx.hash), 'the lookup used the transaction hash');
+  assert.equal(state().tx.stage, 'done', 'it landed, so it is not reported as failed or unconfirmed');
+  assert.equal(chain.flips, 4, 'sent once as far as the chain is concerned');
+});
+
+test('a lost answer with no trace on chain ends as unconfirmed, with the hash, after a few lookups', async () => {
+  const chain = fakeChain();
+  const net = endpoints(chain, (url, method) => (method === 'send_tx' ? 'cors' : undefined));
+  const { swap, state } = setup(chain, { env: { fetch: net.fetch } });
+  await swap.refresh();
+  await swap.flip();
+  assert.equal(state().tx.stage, 'unconfirmed');
+  assert.ok(state().tx.hash);
+  assert.equal(net.log.filter((c) => c.method === 'tx').length, 3);
+});
+
+test('a stale nonce right after a copy of our own transaction was taken is the transaction landing, not a reason to sign again', async () => {
+  const chain = fakeChain();
+  const stale = { name: 'HANDLER_ERROR', cause: { name: 'INVALID_TRANSACTION', info: { InvalidNonce: { tx_nonce: 1001, ak_nonce: 1001 } } } };
+  const net = endpoints(chain, (url, method) => (method !== 'send_tx' ? undefined : url === A ? 'lost' : stale));
+  const { swap, state } = setup(chain, { env: { fetch: net.fetch } });
+  await swap.refresh();
+  chain.txResult = { final_execution_status: 'EXECUTED', status: { SuccessValue: '' } };
+  await swap.flip();
+  assert.equal(state().tx.stage, 'done');
+  assert.equal(net.log.filter((c) => c.method === 'query' && c.params.request_type === 'view_access_key').length, 1, 'never signed a second time');
 });
