@@ -1,0 +1,35 @@
+{
+  "name": "@preflight/guard",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts mcp/test/*.test.ts",
+    "demo": "node --disable-warning=ExperimentalWarning demo/attack-demo.ts",
+    "demo-llm": "node --disable-warning=ExperimentalWarning demo/llm-demo.ts",
+    "demo-llm-replay": "node --disable-warning=ExperimentalWarning demo/llm-replay-demo.ts",
+    "scope-key": "node --disable-warning=ExperimentalWarning scripts/scope-key.ts",
+    "testnet-deploy": "node --disable-warning=ExperimentalWarning scripts/testnet-deploy.ts",
+    "testnet-verify": "node --disable-warning=ExperimentalWarning scripts/testnet-verify.ts",
+    "testnet-demo": "node --disable-warning=ExperimentalWarning demo/testnet-demo.ts",
+    "testnet-demo-llm": "node --disable-warning=ExperimentalWarning demo/testnet-llm-demo.ts",
+    "mcp": "node --disable-warning=ExperimentalWarning mcp/main.ts",
+    "mcp-check": "node --disable-warning=ExperimentalWarning mcp/check.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "near-api-js": "7.4.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
+  }
+}

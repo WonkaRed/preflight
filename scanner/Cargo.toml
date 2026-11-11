@@ -1,0 +1,52 @@
+[package]
+name = "preflight"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "Security scanner for NEAR smart contract source and deployed contracts"
+
+# `deployed` is the live-account mode: it reads the chain over HTTP, so it needs a network stack and its decoders.
+# `cli` is the command line, which also needs `clap`. The in-browser scanner (`web-scan`) turns both off, which keeps
+# those crates out of the wasm module.
+[features]
+default = ["cli"]
+cli = ["deployed", "dep:clap"]
+deployed = ["dep:base64", "dep:bs58", "dep:near-account-id", "dep:sha2", "dep:ureq", "dep:wasmparser"]
+
+# The `preflight` binary has the `account` subcommand, so it is built only with `cli`; the tests that drive it or
+# that mode need the matching feature.
+[[bin]]
+name = "preflight"
+path = "src/main.rs"
+required-features = ["cli"]
+
+[[test]]
+name = "cli"
+required-features = ["cli"]
+
+[[test]]
+name = "deployed"
+required-features = ["deployed"]
+
+[[test]]
+name = "deployed_http"
+required-features = ["deployed"]
+
+[dependencies]
+base64 = { version = "=0.23.1", optional = true }
+bs58 = { version = "=0.5.1", optional = true }
+clap = { version = "4", features = ["derive"], optional = true }
+near-account-id = { version = "=3.0.0", default-features = false, optional = true }
+proc-macro2 = { version = "1", features = ["span-locations"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = { version = "=0.10.9", optional = true }
+syn = { version = "2", features = ["full", "visit"] }
+thiserror = "2"
+toml_edit = { version = "0.25", default-features = false, features = ["parse"] }
+# rustls only (no system OpenSSL); no cookies, gzip or JSON helpers: the client does one POST and reads bytes.
+ureq = { version = "=3.5.1", default-features = false, features = ["rustls"], optional = true }
+# Parsing only: exports are read from the section headers, no validation or component model.
+wasmparser = { version = "=0.263.0", default-features = false, features = ["std"], optional = true }

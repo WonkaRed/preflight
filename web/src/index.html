@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
+<title>Preflight: scan NEAR contract source in your browser</title>
+<meta name="description" content="Paste NEAR smart contract source or name a public GitHub repository. Preflight shows which known vulnerability patterns it finds, each linked to its proof. Runs in the page; nothing is uploaded.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<a class="skip" href="#result">Skip to the result</a>
+
+<div class="wrap">
+  <header class="top">
+    <p class="brand"><b>Preflight</b><span id="rule-count">scanner for NEAR contracts</span></p>
+  </header>
+
+  <section class="intro">
+    <h1>Paste a NEAR contract. See what Preflight finds.</h1>
+    <p>Preflight reads Rust source for known vulnerability patterns, each one proved on a vulnerable and a patched contract. It runs in this page. Nothing you paste is uploaded.</p>
+    <p>This scan is one part of Preflight. The others are a registry on NEAR that stores each verdict under the SHA-256 of the deployed wasm, and a guard that reads the verdict and refuses to let an AI agent sign a call to code marked Unsafe. Both are in the <a href="https://github.com/WonkaRed/preflight">repository</a>.</p>
+  </section>
+
+  <noscript><p class="problem-static">This page runs the scanner as WebAssembly, so it needs JavaScript. Nothing is sent anywhere.</p></noscript>
+
+  <div class="bench">
+    <section class="input" aria-label="What to scan">
+      <div class="tabs" role="tablist" aria-label="Where the code comes from">
+        <button type="button" role="tab" id="tab-source" aria-controls="pane-source" aria-selected="true">Source</button>
+        <button type="button" role="tab" id="tab-github" aria-controls="pane-github" aria-selected="false" tabindex="-1">GitHub repository</button>
+      </div>
+
+      <div role="tabpanel" id="pane-source" aria-labelledby="tab-source" class="pane">
+        <fieldset class="choice">
+          <legend>Start from an example</legend>
+          <div id="examples" class="examples"></div>
+        </fieldset>
+        <fieldset class="choice">
+          <legend>Version</legend>
+          <div class="segment" id="variants" role="radiogroup" aria-label="Which version of the example">
+            <label><input type="radio" name="variant" value="vulnerable" checked><span>Vulnerable</span></label>
+            <label><input type="radio" name="variant" value="patched"><span>Patched</span></label>
+          </div>
+        </fieldset>
+        <label class="field" for="source">Rust source (one file, <code>src/lib.rs</code>)</label>
+        <textarea id="source" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Paste a #[near] contract here"></textarea>
+        <div class="actions">
+          <button type="button" class="btn" id="scan-source" disabled>Scan source</button>
+          <span class="hint">Ctrl or Cmd + Enter also scans. Edit the example and scan again.</span>
+        </div>
+      </div>
+
+      <form role="tabpanel" id="pane-github" aria-labelledby="tab-github" class="pane" hidden>
+        <label class="field" for="repo">Public repository</label>
+        <input id="repo" name="repo" type="text" placeholder="near/near-sdk-rs" spellcheck="false" autocomplete="off" autocapitalize="off" required>
+        <div class="pair">
+          <div>
+            <label class="field" for="ref">Branch, tag or commit <span class="opt">(optional)</span></label>
+            <input id="ref" name="ref" type="text" placeholder="default branch" spellcheck="false" autocomplete="off" autocapitalize="off">
+          </div>
+          <div>
+            <label class="field" for="path">Sub-path <span class="opt">(optional)</span></label>
+            <input id="path" name="path" type="text" placeholder="examples/lockable-fungible-token" spellcheck="false" autocomplete="off" autocapitalize="off">
+          </div>
+        </div>
+        <div class="actions">
+          <button type="submit" class="btn" id="scan-github" disabled>Scan repository</button>
+          <button type="button" class="btn quiet" id="fill-github" disabled>Fill in an example</button>
+          <button type="button" class="btn quiet" id="cancel-github" hidden>Cancel</button>
+        </div>
+        <p class="hint" id="github-progress" role="status"></p>
+        <p class="hint">Asks api.github.com for the file list and raw.githubusercontent.com for each <code>.rs</code> and <code>Cargo.toml</code> file, without signing in. api.github.com allows 60 requests an hour per connection and a scan uses 2, so about 30 scans an hour. Large repositories are cut off at a stated limit.</p>
+      </form>
+    </section>
+
+    <main class="output" id="result" tabindex="-1">
+      <div id="notices"></div>
+      <div id="verdict"></div>
+      <div id="tally"></div>
+      <div id="findings"></div>
+    </main>
+  </div>
+
+  <section class="honest" aria-label="What Preflight is and is not">
+    <div>
+      <h2>What the scan is</h2>
+      <p>A set of <span class="rule-total">syntactic</span> rules that read the shape of your Rust code, not what it does when it runs. Each rule is backed by a vulnerable contract it flags, a patched one it leaves alone, and a sandbox test that exploits the first and fails on the second. Every finding links to that proof. One rule (PF022) also reads the build settings in <code>Cargo.toml</code>, so it can only report on a GitHub scan: pasted source is a single file with no manifest, and that rule stays silent on it.</p>
+    </div>
+    <div>
+      <h2>What it is not</h2>
+      <p>Not an audit. It can miss bugs and it does not follow every code path. A clean result means no known rule fired, not that the contract is safe.</p>
+    </div>
+    <div>
+      <h2>Where your code goes</h2>
+      <p>Pasted and bundled source is scanned inside this page by WebAssembly. The GitHub tab is the only thing that makes requests, and only to GitHub, for the repository you name.</p>
+    </div>
+  </section>
+</div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

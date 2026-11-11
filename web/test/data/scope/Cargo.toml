@@ -1,0 +1,8 @@
+# Test data for scanner.test.mjs: where test code ends. Beside this manifest `tests` and `benches` are test code and
+# are not scanned (counted instead); `tests/vault` holds its own manifest, so it is a crate again; `src/tests` and
+# `examples` are scanned. Every file below carries the same callback that PF001 reports, so a file that was scanned
+# shows as a finding.
+[package]
+name = "scope"
+version = "0.1.0"
+edition = "2024"

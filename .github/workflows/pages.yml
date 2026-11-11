@@ -1,0 +1,49 @@
+# Publishes web/dist to GitHub Pages. Manual only: nothing is published until someone runs this workflow from the
+# Actions tab (and the repository's Settings > Pages > Source is set to "GitHub Actions"). The page uses relative URLs, so
+# it works under https://<user>.github.io/<repo>/ as built.
+name: Deploy web to Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # With no argument rustup installs what rust-toolchain.toml pins: the channel, and the wasm32 target.
+      - name: Install the pinned Rust toolchain
+        run: |
+          rustup toolchain install --no-self-update
+          rustup show active-toolchain
+          rustup target list --installed | grep -x wasm32-unknown-unknown
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      - run: make -C web build
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

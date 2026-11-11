@@ -1,0 +1,237 @@
+{
+  "network": "testnet",
+  "deployedAt": "2026-11-11T02:56:10.959Z",
+  "parent": "preflight-guard.testnet",
+  "accounts": {
+    "registry": "registry.preflight-guard.testnet",
+    "auditor": "auditor.preflight-guard.testnet",
+    "agent": "agent.preflight-guard.testnet",
+    "payee": "payee.preflight-guard.testnet",
+    "vulnerable": "shop-vulnerable.preflight-guard.testnet",
+    "patched": "shop-patched.preflight-guard.testnet",
+    "swapped": "shop-swapped.preflight-guard.testnet"
+  },
+  "codeHashes": {
+    "registry": "23qAyXgQn4zk6BBATGkaHEnuwdqckbpBzJ5PMsKyCa1D",
+    "vulnerable": "8pqFHzB4UP7wR25AD7cSgyXGimPbEFBSKuKCc9ZRh8wT",
+    "patched": "EsZaoDQ34VbQYxz1iYrND8v3Z9nV7bpXvaytPjetdiZ",
+    "swappedAudited": "EsZaoDQ34VbQYxz1iYrND8v3Z9nV7bpXvaytPjetdiZ",
+    "swapped": "7uZs6XN2c9HsGHDPco6tHt28SEjkr5V23UKu8EHs2xSX"
+  },
+  "agentKeys": {
+    "vulnerable": "ed25519:AgbczVtqmCTrLpebi5xqRTQfXzEiUFQMv6EYa3dkMbZ1",
+    "patched": "ed25519:AS3xz4KpyeMLJXcqQRC9wK6Da8XQgmtt33BB1QkBDHHQ",
+    "swapped": "ed25519:HTEzvbiWW6aab9qwsdGQTa5T82Fc7JZBzNshrLnYZP2d"
+  },
+  "orders": {
+    "patched": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25
+    ],
+    "vulnerable": [
+      1
+    ]
+  },
+  "transactions": [
+    {
+      "step": "create-registry",
+      "signer": "preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "CA1UBBQih2uXipeBMSQRoDeoFevrS1HPZqkxqFpvkdWW",
+      "what": "create registry.preflight-guard.testnet with 2 NEAR (full-access key ed25519:H9675A1C3PX2CW2jWCh9soD5frxnhZSZq8GYYS6icRUz)"
+    },
+    {
+      "step": "create-auditor",
+      "signer": "preflight-guard.testnet",
+      "receiver": "auditor.preflight-guard.testnet",
+      "hash": "AsjDvwTXxnNM7hJaHYK49pidQpXfgRFPXgccvefi7Wd9",
+      "what": "create auditor.preflight-guard.testnet with 0.5 NEAR (full-access key ed25519:Uhh1CjXsHXZbUdSoDoWgJizdwSCsNSY8kzBtLZF4Bpd)"
+    },
+    {
+      "step": "create-shop-vulnerable",
+      "signer": "preflight-guard.testnet",
+      "receiver": "shop-vulnerable.preflight-guard.testnet",
+      "hash": "Hwc5vuZpZsu3vh6NjKvNyTLBkjdsNidrPFpmAa2NgQBd",
+      "what": "create shop-vulnerable.preflight-guard.testnet with 2 NEAR (full-access key ed25519:4DJPwDebCLivBDDajxrLWrDd1c2K1d2YptSFUvGxeCGS)"
+    },
+    {
+      "step": "create-shop-patched",
+      "signer": "preflight-guard.testnet",
+      "receiver": "shop-patched.preflight-guard.testnet",
+      "hash": "D8L29W79Tw5pcz8chYooT2iCM9ywEVyTKz7sBcqFjWY5",
+      "what": "create shop-patched.preflight-guard.testnet with 2 NEAR (full-access key ed25519:9HUaqZQxr1VroTdSezEyWZGyk11ahEWxBVsFN513RaB9)"
+    },
+    {
+      "step": "create-shop-swapped",
+      "signer": "preflight-guard.testnet",
+      "receiver": "shop-swapped.preflight-guard.testnet",
+      "hash": "56ZSBQXt8tDXSJUjBQyYWvvtuqyFS7cdNi4udP7w5AsS",
+      "what": "create shop-swapped.preflight-guard.testnet with 2 NEAR (full-access key ed25519:FR33EEmtQjkVtPcVT9wr9ckDcxaPzEEWghQRdYj33ZR8)"
+    },
+    {
+      "step": "create-agent",
+      "signer": "preflight-guard.testnet",
+      "receiver": "agent.preflight-guard.testnet",
+      "hash": "HpL3YVcLUAGbkCsN8YmZQxVYYuJVbSSQ4Q4euFejED6h",
+      "what": "create agent.preflight-guard.testnet with 1.5 NEAR (full-access key ed25519:35PMh54Z4wYHqgVPZWApGxjycUW9zBDfyMBodGH9ZaHR)"
+    },
+    {
+      "step": "create-payee",
+      "signer": "preflight-guard.testnet",
+      "receiver": "payee.preflight-guard.testnet",
+      "hash": "J8Yir6BDFxaiYDdwH8rViwnvu4CqdYP5Gzj1HCTGybLy",
+      "what": "create payee.preflight-guard.testnet with 0.1 NEAR (full-access key ed25519:E4mNVcJb53evNo4VCBLUWVy1trGke5Q6XhKsbBQxtUi8)"
+    },
+    {
+      "step": "deploy-registry",
+      "signer": "registry.preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "HUtwohWywNhw7rvxL6xR96VEDJSy8AVhfd6csXjtCqp2",
+      "what": "deploy the registry and call new({auditors:[auditor]}) in the same transaction"
+    },
+    {
+      "step": "deploy-vulnerable",
+      "signer": "shop-vulnerable.preflight-guard.testnet",
+      "receiver": "shop-vulnerable.preflight-guard.testnet",
+      "hash": "BNimiZPPgZvgaF9HPDebAUoW7b93BST2wQoVQBoUtYzA",
+      "what": "deploy pf001_callback_vulnerable on shop-vulnerable.preflight-guard.testnet and call new()"
+    },
+    {
+      "step": "deploy-patched",
+      "signer": "shop-patched.preflight-guard.testnet",
+      "receiver": "shop-patched.preflight-guard.testnet",
+      "hash": "CTPKhg6QitFR7LWxZxNFYzGD12CowmKREKAN1JuNj4Zt",
+      "what": "deploy pf001_callback_patched on shop-patched.preflight-guard.testnet and call new()"
+    },
+    {
+      "step": "deploy-swapped",
+      "signer": "shop-swapped.preflight-guard.testnet",
+      "receiver": "shop-swapped.preflight-guard.testnet",
+      "hash": "2urq6n7pswz1Hf2p6a3ZwTmwTLtr52FPKWPDyTpmq22z",
+      "what": "deploy pf001_callback_patched on shop-swapped.preflight-guard.testnet and call new()"
+    },
+    {
+      "step": "publish-vulnerable",
+      "signer": "auditor.preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "69ZFfbyj3qbqd3wn8CURXZ8LdZbvkrZbBoWrEaF1BF8A",
+      "what": "publish Unsafe PF001 for vulnerable's code hash 8pqFHzB4UP7wR25AD7cSgyXGimPbEFBSKuKCc9ZRh8wT"
+    },
+    {
+      "step": "publish-patched",
+      "signer": "auditor.preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "Bkr4FAy9P4EhHiu9ARbrM7H5GGCsDr6SVDSHRtMRF8hr",
+      "what": "publish Safe (no rules) for patched's code hash EsZaoDQ34VbQYxz1iYrND8v3Z9nV7bpXvaytPjetdiZ"
+    },
+    {
+      "step": "swap-swapped",
+      "signer": "shop-swapped.preflight-guard.testnet",
+      "receiver": "shop-swapped.preflight-guard.testnet",
+      "hash": "7bUasG7hdRyMY6sdU2scLMjqGCzkfCtQ2XXtDQ3SztT6",
+      "what": "redeploy shop-swapped.preflight-guard.testnet with different code (pf003_promise_result_patched): the audited build is gone, the new one has no verdict"
+    },
+    {
+      "step": "scope-key-vulnerable",
+      "signer": "agent.preflight-guard.testnet",
+      "receiver": "agent.preflight-guard.testnet",
+      "hash": "8wJQeRNCuohYZtbrN1X7VjJMfxYS1EEFy6TKXMAcF3xe",
+      "what": "add a function-call key (ed25519:AgbczVtqmCTrLpebi5xqRTQfXzEiUFQMv6EYa3dkMbZ1) to agent.preflight-guard.testnet: may call release on shop-vulnerable.preflight-guard.testnet only, gas allowance 0.25 NEAR, no deposit"
+    },
+    {
+      "step": "scope-key-patched",
+      "signer": "agent.preflight-guard.testnet",
+      "receiver": "agent.preflight-guard.testnet",
+      "hash": "3ajfA2w2KDtDiFL85EvwPbKmyzWpDMZhW3jL4DUagQy9",
+      "what": "add a function-call key (ed25519:AS3xz4KpyeMLJXcqQRC9wK6Da8XQgmtt33BB1QkBDHHQ) to agent.preflight-guard.testnet: may call release on shop-patched.preflight-guard.testnet only, gas allowance 0.25 NEAR, no deposit"
+    },
+    {
+      "step": "scope-key-swapped",
+      "signer": "agent.preflight-guard.testnet",
+      "receiver": "agent.preflight-guard.testnet",
+      "hash": "BJdixWG6UCvxm711c5edfivj618h9W5cBpwKn4QkH71t",
+      "what": "add a function-call key (ed25519:HTEzvbiWW6aab9qwsdGQTa5T82Fc7JZBzNshrLnYZP2d) to agent.preflight-guard.testnet: may call release on shop-swapped.preflight-guard.testnet only, gas allowance 0.25 NEAR, no deposit"
+    },
+    {
+      "step": "fund-patched",
+      "signer": "agent.preflight-guard.testnet",
+      "receiver": "shop-patched.preflight-guard.testnet",
+      "hash": "tabZXE7t2sDUkPmwMUtLUwGjnY1iDvUhDSs3BXxHYcJ",
+      "what": "fund escrow orders 1,2,3,4,5,6,7,8,9,10,11,12 on shop-patched.preflight-guard.testnet, 0.05 NEAR each, payee payee.preflight-guard.testnet"
+    },
+    {
+      "step": "fund-vulnerable",
+      "signer": "agent.preflight-guard.testnet",
+      "receiver": "shop-vulnerable.preflight-guard.testnet",
+      "hash": "65H9LXyuoXJuKBhV1ASQ5CRzXSQjCkmK6fraqBjdw9vS",
+      "what": "fund escrow order 1 on shop-vulnerable.preflight-guard.testnet, 0.05 NEAR each, payee payee.preflight-guard.testnet"
+    },
+    {
+      "step": "seal-registry",
+      "signer": "registry.preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "DSbF8ogJRpGzmr8vik65CJ2wa6fpx8oHFNRg5R6GtrJ6",
+      "what": "delete the registry's access key(s) ed25519:H9675A1C3PX2CW2jWCh9soD5frxnhZSZq8GYYS6icRUz: nobody can redeploy or change it"
+    },
+    {
+      "step": "fund-patched-more-13",
+      "signer": "agent.preflight-guard.testnet",
+      "receiver": "shop-patched.preflight-guard.testnet",
+      "hash": "2t1TzBCaRv1fbcX2Uo4egwf6pxGWYFtCB5ztNuYSWHJ2",
+      "what": "fund escrow orders 13,14,15,16,17,18,19,20,21,22,23,24,25 on shop-patched.preflight-guard.testnet, 0.05 NEAR each, payee payee.preflight-guard.testnet"
+    },
+    {
+      "step": "delete-agent-full-access-key",
+      "signer": "agent.preflight-guard.testnet",
+      "receiver": "agent.preflight-guard.testnet",
+      "hash": "39A6FMANRzKitGaLPuACf3tGcxhZjc9grSWCQ6L2Ngdg",
+      "what": "delete the agent's only full-access key ed25519:35PMh54Z4wYHqgVPZWApGxjycUW9zBDfyMBodGH9ZaHR (signed with it): the account holds only its three function-call keys, so the escrow orders funded above are the last it can fund"
+    }
+  ],
+  "bootstrap": [
+    {
+      "step": "create-parent",
+      "signer": "testnet",
+      "receiver": "preflight-guard.testnet",
+      "hash": "2hzqRAuoPM4ZRYUa3JmQBNy6NfZcpQqScHFn4yRNEhVJ",
+      "what": "the public testnet faucet creates the parent account preflight-guard.testnet with 10 NEAR (near-cli-rs: account create-account sponsor-by-faucet-service)"
+    },
+    {
+      "step": "create-funder",
+      "signer": "testnet",
+      "receiver": "preflight-guard-fund.testnet",
+      "hash": "FCcMYZN3gNyTyf74AFq24qqpuCPGmfJJ77fkVKZXebVV",
+      "what": "the faucet creates a second throwaway account, preflight-guard-fund.testnet, 10 NEAR, only to top up the parent (the parent needs about 10 NEAR for the sub-accounts and the faucet gives 10)"
+    },
+    {
+      "step": "top-up-parent",
+      "signer": "preflight-guard-fund.testnet",
+      "receiver": "preflight-guard.testnet",
+      "hash": "9E2CimmKWpMcCRMn6UBT8SjGtoQxXXVjpHeg5NGLBUwu",
+      "what": "transfer 8.5 NEAR from preflight-guard-fund.testnet to the parent"
+    }
+  ]
+}

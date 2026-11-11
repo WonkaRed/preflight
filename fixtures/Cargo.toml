@@ -1,0 +1,28 @@
+# One workspace for every fixture contract: fixtures/<rule>/<variant> joins by glob, so a new rule pair needs no
+# edit here. Build for wasm32 only (see ../Cargo.toml for why).
+[workspace]
+resolver = "3"
+members = ["*/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+authors = ["Cole Williams"]
+
+[workspace.dependencies]
+near-sdk = "5.30.1"
+
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true
+
+# PF022 fixture: the one crate built without overflow checks. Cargo reads `[profile]` only from the workspace
+# root, so the per-package override has to live here; see fixtures/pf022_overflow_checks_off/.
+[profile.release.package.pf022-overflow-checks-off-vulnerable]
+overflow-checks = false

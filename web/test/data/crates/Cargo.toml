@@ -1,0 +1,11 @@
+# Test data for scanner.test.mjs: crate grouping the single-crate fixtures cannot show. `a` is a member with its own
+# build profile, set here at the workspace root as cargo does; `nested` is a package that is also a workspace root of its own.
+[workspace]
+resolver = "3"
+members = ["a"]
+
+[profile.release]
+overflow-checks = true
+
+[profile.release.package.a]
+overflow-checks = false

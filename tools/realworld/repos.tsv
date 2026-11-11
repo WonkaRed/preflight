@@ -1,0 +1,15 @@
+# name	clone URL	pinned commit	sub-path scanned (. = repository root)
+near-sdk-rs	https://github.com/near/near-sdk-rs	bacd081a0bd648d840b814dab7677e1f3330afbb	.
+core-contracts	https://github.com/near/core-contracts	1b0436c96379c63aee7d2429c6d5d24019031ab8	.
+intents	https://github.com/near/intents	fce0936b1699e0591204ce152a78afc1c1338b35	.
+sputnik	https://github.com/near-daos/sputnik-dao-contract	5434a59dec23ee0c49df8c8c4350c208a7e75b0b	.
+linear	https://github.com/linear-protocol/LiNEAR	63cd09aabbc3c28ca39ca4266647c24315ae3975	.
+burrowland	https://github.com/NearDeFi/burrowland	0dbfa1803bf26353ffbee2ffd4f494bab23b2756	.
+metapool	https://github.com/Meta-Pool/liquid-staking-contract	e9855e283fb167d5ad01fbc6b76cc86f8cce4182	.
+paras	https://github.com/ParasHQ/paras-marketplace-contract	66684a0e05f30d7fe0a57f5fc5c22703e379aa07	.
+mintbase	https://github.com/mintbase/mb-contracts	59dd194c1d825d60e7dae96d485a55eff86c2be4	.
+rainbow	https://github.com/aurora-is-near/rainbow-token-connector	7d8ee3b086cee4d478e1e104c3d6ef5e5625aadd	.
+social-db	https://github.com/NearSocial/social-db	b4a023d234d0f24a2cf0d4b7998ea485f90f576e	.
+voting-v1	https://github.com/near-ndc/voting-v1	77eaf6f9042649957b3e525e815a75820708b32c	.
+near-linkdrop	https://github.com/near/near-linkdrop	9a6bb316f6b7c83b504ce9c94a80c37178097655	.
+gas-station	https://github.com/near/multichain-gas-station-contract	2d43bf0129a81bfe0ca66814cdf696545fe03b9d	.

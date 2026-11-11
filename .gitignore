@@ -1,0 +1,11 @@
+target/
+node_modules/
+dist/
+.scratch/
+.env
+.env.*
+*.log
+*.key
+
+# Per-finding real-world triage: names third-party files beside verdicts
+tools/realworld/triage.local.tsv

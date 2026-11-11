@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = ["scanner", "exploits", "web-scan"]
+# Contract crates only build for wasm32 (near-sdk refuses a native `cargo build`), so they live in their own
+# workspaces and `cargo build --workspace` here always works.
+exclude = ["fixtures", "registry"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+authors = ["Cole Williams"]
+
+# The wasm module the web demo downloads (`make -C web build`): size over speed, since every visitor pays for it.
+[profile.web]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

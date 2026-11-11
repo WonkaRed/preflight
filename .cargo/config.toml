@@ -1,0 +1,9 @@
+# Contract wasm flags, the same two `cargo near build` sets: `--cfg near` makes near-sdk use the on-chain host
+# functions, `-s` strips symbols. Only wasm32 compilations see them; scanner and tests build for the host.
+[target.wasm32-unknown-unknown]
+rustflags = ["--cfg", "near", "-C", "link-arg=-s"]
+
+# The root, fixtures/ and registry/ are separate cargo workspaces; one shared target dir builds near-sdk once.
+# `CARGO_TARGET_DIR`, when set, wins.
+[build]
+target-dir = "target"

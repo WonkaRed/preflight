@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "tool": {
+    "name": "<b>preflight</b>",
+    "version": "0.1.0\"><script>window.pwned = 'tool'</script>"
+  },
+  "target": "TEST INPUT, not a real scan: <img src=x onerror=\"window.pwned='target'\"> & <script>window.pwned='target'</script>",
+  "summary": {
+    "files_scanned": 3,
+    "findings": 4,
+    "by_severity": {
+      "info": 1,
+      "low": 1,
+      "medium": 0,
+      "high": 1,
+      "critical": 1
+    }
+  },
+  "findings": [
+    {
+      "rule_id": "PF007",
+      "title": "<script>window.pwned = 'title'</script>Privileged method callable by any account",
+      "severity": "critical",
+      "file": "src/<svg onload=window.pwned='file'>.rs",
+      "line": 7,
+      "column": 1,
+      "item": "<script>alert('item')</script>Contract::<b>set_owner</b>",
+      "message": "<script>window.pwned = 'message'</script><h1>Not a heading</h1> <a href=\"javascript:window.pwned='link'\">click</a> &lt;already escaped&gt; &amp; `backticks`",
+      "help": "<iframe srcdoc=\"<script>window.pwned='iframe'</script>\"></iframe>check the caller; <style>body{display:none}</style>"
+    },
+    {
+      "rule_id": "PF003",
+      "title": "Callback ignores the promise result",
+      "severity": "high",
+      "file": "src/lib.rs",
+      "line": 12,
+      "column": 5,
+      "item": "Contract::on_pay",
+      "message": "Unbroken run: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA and a second line.\nThe second line is still text: <script>window.pwned = 'newline'</script>",
+      "help": "read the promise result"
+    },
+    {
+      "rule_id": "PF008",
+      "title": "Storage written without a storage deposit",
+      "severity": "low",
+      "file": "src/lib.rs",
+      "line": 40,
+      "column": 9,
+      "item": "Contract::<T>::store<'a>",
+      "message": "\"><script>window.pwned = 'quote'</script>",
+      "help": "charge a storage deposit"
+    },
+    {
+      "rule_id": "PF006",
+      "title": "Storage prefix reused by two collections",
+      "severity": "info",
+      "file": "src/lib.rs",
+      "line": 51,
+      "column": 9,
+      "item": "Contract::new",
+      "message": "</script><script>window.pwned = 'close'</script><!-- -->",
+      "help": "use a unique storage prefix"
+    }
+  ]
+}

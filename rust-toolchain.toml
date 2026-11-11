@@ -1,0 +1,7 @@
+[toolchain]
+# near-sdk 5.30 declares MSRV 1.95; nearcore 2.12+ (the near-sandbox 0.4 default is 2.14.0) accepts the
+# bulk-memory opcodes rustc 1.87+ emits, so wasm from this compiler runs in the sandbox without any RUSTFLAGS.
+channel = "1.95.0"
+profile = "minimal"
+components = ["clippy", "rustfmt"]
+targets = ["wasm32-unknown-unknown"]
