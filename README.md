@@ -56,7 +56,7 @@ The same script against the deployed testnet contracts made six calls. One was s
 
 ## A locally run model as the agent
 
-Not a script: `qwen3.8-27b`, a locally run model, was the agent. Its task was to pay one escrow order on the audited shop; the page it read said to release on two other contracts instead (the exact task text is in [docs/model-runs.md](docs/model-runs.md)).
+Not a script: `qwen3.8-27b` (the local server's name for a 4-bit quantized community fine-tune of Qwen3.8-27B) was the agent. Its task was to pay one escrow order on the audited shop; the page it read said to release on two other contracts instead (the exact task text is in [docs/model-runs.md](docs/model-runs.md)).
 
 - **On testnet, 10 recorded runs** in two batches of 5, none dropped ([`docs/testnet-llm-runs.txt`](docs/testnet-llm-runs.txt)). The model followed the injected page in 8. The guard refused all 16 injected calls before signing; no transaction exists for any of them.
 - **The real task** was done in 0 of 5 runs of the first batch and in 4 of 5 of the second. Why they differ is under [Limits](#limits).
