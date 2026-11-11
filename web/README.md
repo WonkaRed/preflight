@@ -1,6 +1,6 @@
 # Preflight in the browser
 
-A static page. At the top is the Swap: one NEAR testnet address whose code a button swaps between a vulnerable and a patched build, with a check that trusts the address (always ALLOW) beside Preflight, which looks the verdict up by the hash of the deployed code (BLOCK, then ALLOW). Below it, the scanner runs where the visitor is: paste Rust contract source, pick a bundled vulnerable example
+A static page. At the top is the Swap: one NEAR testnet address whose code a button swaps between a vulnerable and a patched build, with a check that trusts the address (always ALLOW) beside Preflight, which looks the verdict up by the hash of the deployed code (BLOCK, then ALLOW). Below it the page unfolds as you scroll: a scripted agent obeying a poisoned page (it starts playing when it comes into view), how the three parts work, then the scanner, which runs where the visitor is: paste Rust contract source, pick a bundled vulnerable example
 (and its patched twin), or name a public GitHub repository, and read the findings, each linked to its rule's proof (the
 fixture pair and the sandbox exploit test). No server, no account, no install. The Rust scanner is compiled to
 WebAssembly; the page is plain ES modules with no bundler.
@@ -31,6 +31,7 @@ make -C web test     # build, then run the tests
 | `src/swap-agent.js` | The Swap's agent panel: `agentScript` turns the code hash and registry verdict the Swap already read into a scripted agent's refused or allowed call and the guard's decision-log line (built by `guardEntry` in `swap.js`, the shape of `guard/src/log.ts`), and `mountAgent` plays it. No model runs, nothing is signed or sent. |
 | `src/swap-config.js` | The one place the Swap is configured; see below. |
 | `swap-recorded.json` (in `dist/`) | A copy of `../demo/swap/recorded.json`, written by `tools/build.mjs` (the JSON `null` when the file is absent). |
+| `src/page.js` | Scroll reveal (a section is hidden only once an `IntersectionObserver` is watching it, never with reduced motion or without the observer), `whenSeen` (the agent waits to be on screen) and click-to-copy for hashes. Hashes show their first characters and carry the whole value in `title`. |
 | `src/app.js`, `index.html`, `style.css` | The page. |
 | `src/config.js` | `REPO_TREE_URL`: where the proof links point (this repository's `main` tree on GitHub). A fork sets its own; left empty, the paths show as plain text. |
 | `tools/site-data.mjs` | Reads `fixtures/` and `exploits/` at build time: the bundled examples and each rule's proof paths. Add a rule with its fixtures and exploit test and its links appear with no change here. |

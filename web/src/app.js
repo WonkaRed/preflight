@@ -2,7 +2,9 @@ import { REPO_TREE_URL } from './config.js';
 import { LIMITS } from './github.js';
 import { backgroundScanner } from './scan-client.js';
 import { compileScanner, loadScanner } from './scanner.js';
+import { copyOnClick, revealOnScroll } from './page.js';
 import { createSession } from './session.js';
+import { RULE_WORDS } from './swap-agent.js';
 import { mountSwap } from './swap-view.js';
 import { countBySeverity, h, plural, renderFindings, renderProblem, renderScanning, renderTally, renderVerdict, sortFindings, validate, verdict } from './report.js';
 
@@ -115,7 +117,8 @@ async function boot() {
     const rule = rules.get(example.rule);
     $('examples').append(h(document, 'label', {},
       h(document, 'input', { type: 'radio', name: 'example', value: example.id }),
-      h(document, 'span', { class: `example sev-${rule.severity}` }, h(document, 'b', {}, rule.id), h(document, 'span', {}, ...titleNodes(rule.title)))));
+      h(document, 'span', { class: `example sev-${rule.severity}` }, h(document, 'b', {}, rule.id), h(document, 'span', {}, ...titleNodes(rule.title)),
+        RULE_WORDS[rule.id] && h(document, 'em', {}, `${RULE_WORDS[rule.id][0].toUpperCase()}${RULE_WORDS[rule.id].slice(1)}.`))));
   }
 
   function scanSource() {
@@ -184,5 +187,7 @@ for (const name of TABS) {
   });
 }
 
+revealOnScroll(document, { calm: matchMedia('(prefers-reduced-motion: reduce)').matches });
+copyOnClick(document);
 mountSwap();
 boot();

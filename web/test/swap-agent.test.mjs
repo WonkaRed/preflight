@@ -28,6 +28,7 @@ const script = (state, at = AT) => viewModel(state, { now: at, explorerUrl: 'htt
 test('a BLOCK is REFUSED, and its log line has the guard\'s fields in the guard\'s order, with the live hash and rule', async () => {
   const a = script(await live('vulnerable'));
   assert.deepEqual([a.outcome.word, a.outcome.tone, a.verdict, a.codeHash], ['REFUSED', 'block', 'Unsafe (PF001)', HASH.vulnerable]);
+  assert.equal(a.plain, 'The code at this address is the one with the hole.');
   assert.equal(a.call, `${ADDRESS}.deposit with 0.5 NEAR`);
   const entry = JSON.parse(a.log);
   assert.deepEqual(Object.keys(entry), ['timestamp', 'contract', 'method', 'deposit', 'codeHash', 'decision', 'outcome', 'reasons']);
@@ -177,6 +178,22 @@ test('the section hides when there is no address, shows again with one, and the 
   assert.equal(rows().join(), 'on,off,off,off,off', 'from the first row');
   advance(10_000);
   assert.deepEqual([rows().join(), els.get('agent-word').textContent], ['on,on,on,on,on', 'REFUSED']);
+});
+
+test('the staging waits until the panel is on screen, then plays from the first row with the verdict that is current by then', async () => {
+  let seen = null;
+  const { agent, els, rows, advance, timers } = panel({ seen: (el, run) => { seen = run; } });
+  agent.update(script(await live('vulnerable')));
+  advance(10_000);
+  assert.equal(rows().join(), 'off,off,off,off,off', 'not seen: every row waits (the page ships them showing, so it reads without script) and nothing is scheduled');
+  assert.equal(timers.length, 0);
+  assert.equal(els.get('swap-agent').hidden, false, 'the section itself is there to be seen');
+  agent.update(script(await live('patched')));
+  seen();
+  advance(10_000);
+  assert.deepEqual([els.get('agent-word').textContent, rows().join()], ['ALLOWED', 'on,on,on,on,on'], 'the latest verdict, not the one read first');
+  agent.update(script(await live('vulnerable')));
+  assert.equal(rows().join(), 'on,on,on,off,off', 'once seen, a swap replays the check at once');
 });
 
 test('the ids the panel looks for are all in the page', async () => {

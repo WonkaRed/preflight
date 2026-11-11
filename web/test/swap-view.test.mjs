@@ -26,9 +26,11 @@ test('V live: the allowlist says ALLOW, Preflight says BLOCK with PF001, the has
   assert.equal(m.address, 'chameleon.example.testnet');
   assert.equal(m.addressHref, `${EXPLORER}/account/chameleon.example.testnet`);
   assert.equal(m.trust.word, 'ALLOW');
-  assert.equal(m.trust.note, 'chameleon.example.testnet is on the allowlist, so it passes.');
+  assert.equal(m.trust.note, 'This address is on its safe list, so it says yes. Every time.');
+  assert.equal(m.hint, 'Press it. The code behind this address changes, live.');
   assert.deepEqual([m.pf.tone, m.pf.word, m.pf.rules, m.pf.build, m.pf.hash], ['block', 'BLOCK', 'PF001', 'Vulnerable build', HASH.vulnerable]);
-  assert.match(m.pf.line, /anyone can credit themselves a balance without paying/);
+  assert.equal(m.pf.line, 'This code has a hole: anyone can give themselves a balance and take what other people deposited.');
+  assert.match(m.pf.tech, /Any account can call the contract's callback directly, so anyone can credit themselves a balance without paying/);
   assert.deepEqual(m.button, { label: 'Swap the code', disabled: false });
   assert.equal(m.flips, 'Swaps so far: 3');
 });
@@ -38,15 +40,18 @@ test('P live: the allowlist still says ALLOW and Preflight now says ALLOW too, o
   const m = view(state);
   assert.equal(m.trust.word, 'ALLOW');
   assert.deepEqual([m.pf.tone, m.pf.word, m.pf.rules, m.pf.build, m.pf.hash], ['allow', 'ALLOW', '', 'Patched build', HASH.patched]);
-  assert.match(m.pf.line, /Safe verdict for this exact code/);
+  assert.equal(m.pf.line, 'This is the fixed code. Preflight says yes.');
+  assert.match(m.pf.tech, /Safe verdict for this exact code/);
 });
 
 test('code with no verdict is WARN and says it is unaudited; an unknown rule falls back to a generic line', async () => {
   let { state } = await liveState('vulnerable', (chain) => { delete chain.verdicts[HASH.vulnerable]; });
   assert.deepEqual([view(state).pf.tone, view(state).pf.word], ['warn', 'WARN']);
-  assert.match(view(state).pf.line, /no verdict for this code/);
+  assert.match(view(state).pf.line, /Nobody has vouched for this code/);
+  assert.match(view(state).pf.tech, /no verdict for this code/);
   ({ state } = await liveState('vulnerable', (chain) => { chain.verdicts[HASH.vulnerable].rule_ids = ['PF009']; }));
-  assert.match(view(state).pf.line, /marks this exact code unsafe \(PF009\)/);
+  assert.equal(view(state).pf.line, 'This code is marked unsafe.');
+  assert.match(view(state).pf.tech, /marks this exact code unsafe \(PF009\)/);
 });
 
 test('countdown: the button is disabled and counts down in whole seconds, never an error', async () => {
@@ -88,6 +93,7 @@ test('recorded, RPC unreachable: labeled with its date, nothing claimed live, th
   assert.equal(m.status.tone, 'recorded');
   assert.equal(m.status.text, 'Recorded on 2026-11-11, RPC unreachable. Nothing below is live.');
   assert.deepEqual(m.button, { label: 'Replay a recorded swap', disabled: false });
+  assert.equal(m.hint, 'Press it to replay a recorded swap of the code behind this address.');
   assert.deepEqual([m.pf.word, m.pf.rules, m.pf.build, m.flips], ['BLOCK', 'PF001', 'Vulnerable build', ''], 'the recording starts before its first swap');
   assert.deepEqual(m.tx, { text: 'The recording starts here. Each click replays one swap.', link: null });
   const second = view({ ...state, replay: 1 });
@@ -116,7 +122,7 @@ test('empty and loading: no verdict word is invented, and the button is off', ()
 
 // ---- paint ---------------------------------------------------------------------------------------------------------
 
-const IDS = ['status', 'detail', 'source', 'address', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfBuild', 'pfHash', 'button', 'flips', 'tx'];
+const IDS = ['status', 'detail', 'source', 'address', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfTech', 'pfBuild', 'pfHash', 'button', 'hint', 'flips', 'tx'];
 function fakeSection() {
   const doc = fakeDocument();
   const els = Object.fromEntries(IDS.map((name) => [name, Object.assign(doc.createElement('div'), { textContent: '' })]));
@@ -204,4 +210,23 @@ test('a read that failed keeps the live data with a quiet note, and the page nam
   assert.match(blip.status.text, /^Live on NEAR testnet\. Reconnecting; what you see is from the last read\./);
   assert.equal(blip.pf.word, 'BLOCK', 'the last live verdict stays');
   assert.equal(view({ ...state, mode: 'recorded', reason: 'rpc-down', endpoint: null, recorded }).source, '', 'a recording names no endpoint');
+});
+
+test('both builds read correctly on their own: the rule id comes with its plain words, the full hash is the title, and the swap animates card and hash', async () => {
+  const vulnerable = view((await liveState('vulnerable')).state);
+  const patched = view((await liveState('patched')).state);
+  assert.deepEqual([vulnerable.pf.rules, vulnerable.pf.ruleWords], ['PF001', 'anyone can credit themselves a balance']);
+  assert.deepEqual([patched.pf.word, patched.pf.rules, patched.pf.ruleWords, patched.trust.word], ['ALLOW', '', '', 'ALLOW'], 'the allowlist says the same in both builds');
+
+  const { doc, els } = fakeSection();
+  const animated = [];
+  els.pfCard.animate = () => animated.push('card');
+  els.pfHash.animate = () => animated.push('hash');
+  paint(doc, els, vulnerable, { animate: true });
+  assert.deepEqual([els.pfHash.textContent, els.pfHash.attrs.title, els.pfRules.attrs.title], [HASH.vulnerable, HASH.vulnerable, 'anyone can credit themselves a balance'], 'the text stays whole; the page shortens it');
+  assert.deepEqual(animated, ['card', 'hash']);
+  paint(doc, els, patched, { animate: true });
+  assert.deepEqual([els.pfCard.attrs['data-tone'], els.pfHash.attrs.title, els.pfRules.attrs.title], ['allow', HASH.patched, ''], 'the other build, painted over the first');
+  paint(doc, els, patched, { animate: true });
+  assert.equal(animated.length, 4, 'a read that changed nothing animates nothing');
 });

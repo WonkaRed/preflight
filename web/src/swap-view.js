@@ -5,11 +5,20 @@
 import { isHash } from './near.js';
 import { clean, h } from './report.js';
 import { createSwap, isAccountId, parseRecorded } from './swap.js';
-import { agentScript, mountAgent } from './swap-agent.js';
+import { agentScript, mountAgent, RULE_WORDS } from './swap-agent.js';
 import { SWAP_CONFIG } from './swap-config.js';
 
+// What each BLOCK says first, in words anyone can read, and the exact technical sentence behind it (shown in the card's fold-out).
+const BUG_PLAIN = {
+  PF001: 'This code has a hole: anyone can give themselves a balance and take what other people deposited.',
+};
 const BUG_LINE = {
   PF001: 'Any account can call the contract\'s callback directly, so anyone can credit themselves a balance without paying and withdraw what others deposited.',
+};
+const HINT = {
+  loading: 'Press it. The code behind this address changes, live.',
+  live: 'Press it. The code behind this address changes, live.',
+  recorded: 'Press it to replay a recorded swap of the code behind this address.',
 };
 
 const when = (state) => state.recorded?.recordedAt ?? '';
@@ -35,13 +44,17 @@ export function viewModel(state, { now, explorerUrl }) {
   const verdict = replay ?? state.verdict;
   const known = mode === 'live' || mode === 'recorded';
 
-  const pf = { tone: 'none', word: '...', rules: '', line: '', build: '', hash: '' };
+  const pf = { tone: 'none', word: '...', rules: '', ruleWords: '', line: '', tech: '', build: '', hash: '' };
   if (known && verdict) {
     const rule = verdict.ruleIds[0];
     pf.tone = verdict.decision.toLowerCase();
     pf.word = verdict.decision;
     pf.rules = verdict.ruleIds.join(', ');
-    pf.line = verdict.decision === 'BLOCK'
+    pf.ruleWords = RULE_WORDS[rule] ?? '';
+    pf.line = verdict.decision === 'BLOCK' ? (BUG_PLAIN[rule] ?? 'This code is marked unsafe.')
+      : verdict.decision === 'ALLOW' ? 'This is the fixed code. Preflight says yes.'
+        : verdict.registered ? 'This code has a warning on record.' : 'Nobody has vouched for this code, or it changed after it was checked.';
+    pf.tech = verdict.decision === 'BLOCK'
       ? (BUG_LINE[rule] ?? `The registry marks this exact code unsafe (${pf.rules}).`)
       : verdict.decision === 'ALLOW' ? 'The registry holds a Safe verdict for this exact code.'
         : verdict.registered ? `The registry marks this exact code Warn (${pf.rules}).` : 'The registry has no verdict for this code: unaudited, or changed since its audit.';
@@ -81,10 +94,11 @@ export function viewModel(state, { now, explorerUrl }) {
     address: address ?? 'no address yet',
     addressHref: address && isAccountId(address) ? `${explorerUrl}/account/${address}` : null,
     trust: address
-      ? { word: 'ALLOW', note: `${address} is on the allowlist, so it passes.` }
+      ? { word: 'ALLOW', note: 'This address is on its safe list, so it says yes. Every time.' }
       : { word: 'No data', note: '' },
     pf,
     agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, step: replay ? state.replay : 0 }),
+    hint: HINT[mode] ?? '',
     button,
     tx,
     flips: replay ? (state.replay === 0 ? '' : `Recorded swap ${state.replay} of ${state.recorded.steps.length - 1}`) : mode === 'live' && state.flips !== null ? `Swaps so far: ${state.flips}` : '',
@@ -106,21 +120,29 @@ export function paint(doc, els, model, { animate = false } = {}) {
   els.pfCard.setAttribute('data-tone', model.pf.tone);
   els.pfWord.textContent = model.pf.word;
   els.pfRules.textContent = model.pf.rules;
+  els.pfRules.setAttribute('title', model.pf.ruleWords);
   els.pfLine.textContent = model.pf.line;
+  els.pfTech.textContent = model.pf.tech;
   els.pfBuild.textContent = model.pf.build;
   els.pfHash.textContent = model.pf.hash;
+  els.pfHash.setAttribute('title', model.pf.hash);
   els.button.textContent = model.button.label;
   els.button.disabled = model.button.disabled;
+  els.hint.textContent = model.hint;
   els.flips.textContent = model.flips;
   els.tx.replaceChildren(...(!model.tx ? [] : !model.tx.link ? [model.tx.text]
     : [model.tx.text, ' ', h(doc, 'a', { href: model.tx.link.href, target: '_blank', rel: 'noopener noreferrer' }, model.tx.link.text)]));
-  if (animate && changed) els.pfCard.animate?.([{ transform: 'scale(0.985)', opacity: 0.55 }, { transform: 'none', opacity: 1 }], { duration: 380, easing: 'ease-out' });
+  // The swap is the page's event: the Preflight card turns over to its new verdict and the hash it read slides in; the allowlist card is never touched.
+  if (animate && changed) {
+    els.pfCard.animate?.([{ transform: 'perspective(900px) rotateX(-80deg)', opacity: 0.2 }, { transform: 'perspective(900px) rotateX(8deg)', opacity: 1, offset: 0.7 }, { transform: 'none', opacity: 1 }], { duration: 650, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
+    els.pfHash.animate?.([{ opacity: 0, transform: 'translateY(0.5em)' }, { opacity: 1, transform: 'none' }], { duration: 700, delay: 250, easing: 'ease-out', fill: 'backwards' });
+  }
 }
 
 const IDS = {
   status: 'swap-status', detail: 'swap-detail', source: 'swap-source', address: 'swap-address', trustWord: 'trust-word', trustNote: 'trust-note',
-  pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfBuild: 'pf-build', pfHash: 'pf-hash',
-  button: 'swap-button', flips: 'swap-flips', tx: 'swap-tx',
+  pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfTech: 'pf-tech', pfBuild: 'pf-build', pfHash: 'pf-hash',
+  button: 'swap-button', hint: 'swap-hint', flips: 'swap-flips', tx: 'swap-tx',
 };
 
 /** Starts the section on the page and returns its controller. Never throws: whatever goes wrong, the section shows a state that says so. */
