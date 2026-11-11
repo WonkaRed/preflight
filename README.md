@@ -4,14 +4,14 @@
 
 AI agents sign calls to contracts by address; the code behind an address can change.
 
-![The Swap: the allowlist keeps saying ALLOW while Preflight goes from BLOCK to ALLOW.](docs/media/swap.gif)
+![The Swap: the normal safety check keeps saying ALLOW while Preflight goes from ALLOW to BLOCK when the code is swapped.](docs/media/swap.gif)
 
-*One NEAR testnet address, two checks. The allowlist says ALLOW before and after the swap. Preflight looks the verdict up under the hash of the code deployed right now, so it goes from BLOCK (PF001) to ALLOW with the code. The swap is a real testnet transaction.*
+*One NEAR testnet address, two checks. The normal safety check (an allowlist by account id) says ALLOW before and after the swap. Preflight looks the verdict up under the hash of the code deployed right now, so here it goes from ALLOW to BLOCK (PF001) with the code. The swap is a real testnet transaction.*
 
 **TL;DR**
 
-- **What it is:** a 26-rule NEAR contract scanner (each rule proved by a sandbox exploit), an on-chain registry of verdicts keyed by code hash, an agent-side guard, and an MCP server.
-- **Live page:** <https://wonkared.github.io/preflight/>. Click Swap and watch the verdict change while an address allowlist keeps saying ALLOW.
+- **What it is:** a 26-rule NEAR contract scanner (each rule backed by a sandbox exploit), an on-chain registry of verdicts keyed by code hash, an agent-side guard, and an MCP server.
+- **Live page:** <https://wonkared.github.io/preflight/>. Press Swap the code and watch the verdict change while the normal safety check (an address allowlist) keeps saying ALLOW.
 - **Agent-side wrapper:** `GuardedAgent` in [`guard/`](guard) refuses to sign for code that is not allowed. Run `make -C guard testnet-verify` to see its decisions against the live chain.
 - **Scoped function-call key, limits explained:** [what it can and cannot do](guard/README.md#function-call-access-keys-what-they-can-and-cannot-do), made with `npm run scope-key` in `guard/`; the testnet agent holds only such keys ([below](#the-agents-key)).
 - **Prompt-injection attack demo, log shown:** `make -C guard demo` ([the log](#the-attack-demo-and-its-log)); the same attack on testnet: [docs/testnet-demo.md](docs/testnet-demo.md).
@@ -143,11 +143,11 @@ The hosted page also scans contract source in your browser, no install; `make -C
 
 Each stated once; full text in [docs/limits.md](docs/limits.md).
 
-- **The scan is syntactic.** It reports patterns, not proofs, and can miss a bug or flag safe code; a clean result means "no known rule fired". On 14 public repositories pinned by commit it reports 90 findings: 10 true, 65 defensible, 15 wrong (17 percent). That split is our judgment and cannot be rerun from this repository ([docs/real-world.md](docs/real-world.md)).
-- **A verdict is only as good as its auditor.** Here the auditor is an account we control, and a verdict covers one exact wasm hash. The guard's check and the transaction are two steps, so an owner could redeploy between them.
-- **The model evidence is thin.** One model and a page we wrote, reworded five times before the first batch to get the model to follow it. After batch 1 the demo's refusal text told the model its task could go on, and in 2 of the 4 successes the demo's stock rule also named the right order. Those are hints from the demo harness, not decisions of the model's and not behavior of the guard.
+- **The scan is syntactic.** It reports patterns, not proofs, and can miss a bug or flag safe code; a clean result means "no known rule fired". On 14 public repositories pinned by commit it reports 90 findings: 10 true, 65 defensible, 15 wrong (17 percent). That split is my judgment and cannot be rerun from this repository ([docs/real-world.md](docs/real-world.md)).
+- **A verdict is only as good as its auditor.** Here the auditor is an account I control, and a verdict covers one exact wasm hash. The guard's check and the transaction are two steps, so an owner could redeploy between them.
+- **The model evidence is thin.** One model and a page I wrote, reworded five times before the first batch to get the model to follow it. After batch 1 the demo's refusal text told the model its task could go on, and in 2 of the 4 successes the demo's stock rule also named the right order. Those are hints from the demo harness, not decisions of the model's and not behavior of the guard.
 - **Testnet only.** Throwaway accounts and faucet funds. The exploit tests run in a local sandbox only. The three scripted testnet runs use a script as the agent.
-- **The Swap shows what each check keys on; it measures neither.** The "trusts the address" card is a plain allowlist by account id, not a model of any wallet or agent. When the page cannot reach the chain it says so and replays a recording, labeled as recorded.
+- **The Swap shows what each check keys on; it measures neither.** The "A normal safety check" card is a plain allowlist by account id, not a model of any wallet or agent. When the page cannot reach the chain it says so and replays a recording, labeled as recorded.
 - **Platform.** Only Linux x86-64 with glibc 2.39 or newer was tried.
 
 ## Layout
