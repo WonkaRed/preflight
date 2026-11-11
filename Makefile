@@ -1,5 +1,5 @@
-# `make test` is the one command a fresh clone needs: it builds the scanner, the fixture contracts and the
-# registry, starts a local NEAR sandbox, and checks every exploit. See README.md.
+# `make test` is the one command a fresh clone needs: it builds the scanner, the fixture contracts, the
+# registry and The Swap's contracts (demo/swap), starts a local NEAR sandbox, and checks every exploit. See README.md.
 
 # The compiler comes from rust-toolchain.toml; an exported RUSTUP_TOOLCHAIN would silently override it.
 unexport RUSTUP_TOOLCHAIN
@@ -22,6 +22,7 @@ test:
 	$(MAKE) -C registry test
 	$(MAKE) -C guard test
 	$(MAKE) -C web test
+	$(MAKE) -C demo/swap test
 
 # Scan the PF001 fixture pair (vulnerable: exit 1 with a finding; patched: exit 0), then run its exploit.
 demo:

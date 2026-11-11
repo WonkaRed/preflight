@@ -1,16 +1,16 @@
-# Preflight
+# Preflight: verdicts keyed to the code, not the address
 
 [![test](https://github.com/WonkaRed/preflight/actions/workflows/test.yml/badge.svg)](https://github.com/WonkaRed/preflight/actions/workflows/test.yml)
 
-AI agents sign transactions to contracts they have never read. A web page an agent reads can be written to point it at any contract, and a signed call cannot be taken back.
+Verdicts keyed to the code, not the address. An account id stays the same when its code is replaced, so a check that trusts the address keeps saying yes after the contract turns vulnerable. Preflight hashes the code that is deployed right now and looks the verdict up under that hash, so it flips from BLOCK to ALLOW when the code does.
 
-Preflight checks the code first. It has three parts:
+**Try it: click Swap** at <https://wonkared.github.io/preflight/>. The page shows one NEAR testnet address and two checks side by side: one trusts the address, the other is Preflight. The button swaps the code behind that address between a vulnerable and a patched build; every click is a testnet transaction with a link. The address-trusting check keeps saying ALLOW, and Preflight shows BLOCK (PF001) for the vulnerable build and ALLOW for the patched one. When the page cannot reach the chain it says so and replays a recording instead, labeled as recorded.
 
-- **Scanner.** 26 rules. Each rule is proved by a sandbox exploit that works on a vulnerable contract and fails on the patched one.
+Preflight has three parts:
+
+- **Scanner.** 26 rules. Each rule is proved by a sandbox exploit that works on a vulnerable contract and fails on the patched one. The same page also scans a contract's source in your browser, no install.
 - **Registry.** A contract on NEAR that stores the verdict under the SHA-256 of the deployed wasm.
 - **Guard.** It sits in the agent. It refuses to sign on an Unsafe verdict, asks a human when the code is unaudited or has been swapped, and logs every decision before it signs.
-
-Scan a contract in your browser, no install: <https://wonkared.github.io/preflight/>.
 
 Built at NEAR HACKATHON (tracks: AI Security & Defense, Open Innovation). All code was written by AI agents, see [AI disclosure](#ai-disclosure). MIT licensed, see [LICENSE](LICENSE).
 
@@ -209,7 +209,7 @@ What this does not show: that models in general are injected this way (one model
 
 ## Try it in the browser
 
-`web/` is a static page that runs the scanner where you are: no server, no account. Paste Rust contract source, pick a bundled vulnerable example (and its patched twin), or enter a public GitHub repository (`owner/repo`, optionally a ref and a sub-path). Each finding names its rule's fixture pair and sandbox exploit test (each a link to that path in this repository on GitHub).
+`web/` is a static page. At the top is the Swap (described above); below it the scanner runs where you are: no server, no account. Paste Rust contract source, pick a bundled vulnerable example (and its patched twin), or enter a public GitHub repository (`owner/repo`, optionally a ref and a sub-path). Each finding names its rule's fixture pair and sandbox exploit test (each a link to that path in this repository on GitHub).
 
 ```sh
 make -C web serve   # build, then serve it at http://127.0.0.1:8000/
@@ -255,6 +255,7 @@ make -C web serve   # build, then serve it at http://127.0.0.1:8000/
 - The rules cover known patterns only, and on real code most findings are not bugs. On 14 public repositories pinned by commit the scanner reports 90 findings. In 75 of them the pattern the rule names is really in the code: in 10 with nothing in view that stops it (true), in 65 where something the scanner cannot see keeps the harm out (defensible). 15 (17 percent) are wrong. The script reproduces the 90 findings and the per-rule counts; the per-finding triage is withheld, so the split into true, defensible and wrong is our judgment and cannot be rerun from this repository. The counts, the false-alarm shapes and the script are in [docs/real-world.md](docs/real-world.md). Files under a crate's `tests/` or `benches/` directory are skipped and counted in the report.
 - `preflight account` reads one block of one account through the RPC it is given and trusts that node's answers. It uses no HTTP proxy, whatever `HTTP_PROXY` or `ALL_PROXY` say. It checks the code's export names, not what the code does; PFW03's metadata is self-declared; a clean report means only that PFW01 to PFW06 found nothing.
 - The registry is trust-based: a verdict is only as good as the allowlisted auditor who published it, and it covers one exact wasm hash. The guard's check and the transaction are two steps; an owner could redeploy between them (see "Limits" in [guard/README.md](guard/README.md)).
+- The Swap on the web page is a demonstration of what each check keys on, not a measure of either. The "trusts the address" card is a plain allowlist by account id, the simplest form of that check, not a model of any particular wallet or agent. The registry's auditor is an account we control. The key in the page is public on purpose: it is a function-call key that can only call `flip` on a demo contract, with a small gas allowance, and everything on it is NEAR testnet. When the allowance runs out or the RPC is unreachable the button replays `demo/swap/recorded.json` and the page says so. The page signs with the browser's built-in Ed25519 (WebCrypto), which older browsers lack; there it says so and nothing is sent.
 - The exploit tests run in a local sandbox only. Behaviour on testnet or mainnet is not tested, apart from the read-only and recorded testnet runs above.
 
 ## Layout
@@ -265,14 +266,14 @@ fixtures/   One vulnerable/patched NEAR contract pair per rule.
 exploits/   near-workspaces sandbox tests: the exploit succeeds on `vulnerable`, fails on `patched`.
 registry/   NEAR contract storing verdicts by code hash; only allowlisted auditors can publish.
 guard/      TypeScript: view_code, hash, registry lookup, allow / warn / block; the offline and testnet demos; `guard/mcp`, the MCP server.
-web/        Static page that runs the scanner in the browser (compiled to WebAssembly).
+web/        Static page: the Swap (code flip, two checks) and the scanner running in the browser (compiled to WebAssembly).
 web-scan/   Rust crate `preflight-web`: the scanner as the wasm module the page loads.
 docs/       The testnet deployment record, scan reports and recorded runs.
 ```
 
 A rule is a Rust type with an id, a severity and a `check` over one crate's parsed source; adding a file under `scanner/src/rules/` registers it. The interfaces and the findings' JSON shape are in [SPEC.md](SPEC.md).
 
-Built on [near-sdk](https://github.com/near/near-sdk-rs) 5.30.1 (the registry and the fixtures), [near-workspaces](https://github.com/near/near-workspaces-rs) 0.24.0 and [near-sandbox](https://github.com/near/near-sandbox-rs) 0.4.0 (a local nearcore 2.14.0 node for the exploit tests), [near-api-js](https://github.com/near/near-api-js) 7.4.0 (the guard), the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) 2.4.0 with zod 4.6.7 (the MCP server) and NEAR JSON-RPC (`view_code`, `view_account`, `view_access_key`, `call_function`).
+Built on [near-sdk](https://github.com/near/near-sdk-rs) 5.30.1 (the registry and the fixtures), [near-workspaces](https://github.com/near/near-workspaces-rs) 0.24.0 and [near-sandbox](https://github.com/near/near-sandbox-rs) 0.4.0 (a local nearcore 2.14.0 node for the exploit tests), [near-api-js](https://github.com/near/near-api-js) 7.4.0 (the guard), the [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk) 2.4.0 with zod 4.6.7 (the MCP server) and NEAR JSON-RPC (`view_code`, `view_account`, `view_access_key`, `call_function`). The web page adds no library: the Swap's transaction serializer, base58 and signing are hand-written over WebCrypto, and a test checks them byte for byte against a transaction built by near-api-js 7.4.0.
 
 ## Sister project
 

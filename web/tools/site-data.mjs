@@ -12,6 +12,9 @@ export const EXAMPLES = ['pf001_callback', 'pf002_one_yocto', 'pf007_unguarded_a
 const read = (path) => readFileSync(`${REPO_ROOT}${path}`, 'utf8');
 const ruleId = (slug) => slug.slice(0, 5).toUpperCase();
 
+/** The recording the Swap replays when the chain cannot be read: `demo/swap/recorded.json`, or the JSON `null` (no recording yet). */
+export const recordedSwaps = () => (existsSync(`${REPO_ROOT}demo/swap/recorded.json`) ? read('demo/swap/recorded.json') : 'null');
+
 /** `{ examples: [{ id, rule, vulnerable, patched }], proofs: { PF001: { fixture, exploit } } }` with repo-relative paths. */
 export function siteData() {
   const proofs = {};

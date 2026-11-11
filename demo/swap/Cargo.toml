@@ -1,0 +1,27 @@
+# The Swap: one workspace for the two chameleon builds, the switch and the sandbox tests. Contract crates build for
+# wasm32 only (see ../../Cargo.toml for why), so a plain `cargo test` here runs only the sandbox crate, which
+# builds the contracts itself.
+[workspace]
+resolver = "3"
+members = ["chameleon/vulnerable", "chameleon/patched", "switch", "sandbox"]
+default-members = ["sandbox"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+authors = ["Cole Williams"]
+
+[workspace.dependencies]
+near-sdk = "5.30.1"
+
+# Size matters here twice: the switch holds both chameleon builds in its storage (1 NEAR per 100 KB), and every
+# flip carries one of them in a transaction.
+[profile.release]
+codegen-units = 1
+opt-level = "z"
+lto = true
+debug = false
+panic = "abort"
+overflow-checks = true

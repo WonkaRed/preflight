@@ -3,6 +3,7 @@ import { LIMITS } from './github.js';
 import { backgroundScanner } from './scan-client.js';
 import { compileScanner, loadScanner } from './scanner.js';
 import { createSession } from './session.js';
+import { mountSwap } from './swap-view.js';
 import { countBySeverity, h, plural, renderFindings, renderProblem, renderScanning, renderTally, renderVerdict, sortFindings, validate, verdict } from './report.js';
 
 const $ = (id) => document.getElementById(id);
@@ -181,4 +182,5 @@ for (const name of TABS) {
   });
 }
 
+mountSwap();
 boot();

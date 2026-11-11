@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { REPO_TREE_URL } from '../src/config.js';
-import { siteData } from '../tools/site-data.mjs';
+import { parseRecorded } from '../src/swap.js';
+import { SWAP_CONFIG } from '../src/swap-config.js';
+import { recordedSwaps, siteData } from '../tools/site-data.mjs';
 import { DIST } from './helpers.mjs';
 
 const SRC = new URL('../src/', import.meta.url);
@@ -12,9 +14,10 @@ const sources = readdirSync(SRC).filter((name) => /\.(html|js|css)$/.test(name))
 const html = read(SRC, 'index.html');
 
 test('dist holds every source file unchanged, the wasm module and the generated data', () => {
-  assert.deepEqual(readdirSync(DIST).sort(), [...readdirSync(SRC), 'preflight.wasm', 'site-data.json'].sort());
+  assert.deepEqual(readdirSync(DIST).sort(), [...readdirSync(SRC), 'preflight.wasm', 'site-data.json', 'swap-recorded.json'].sort());
   for (const name of readdirSync(SRC)) assert.equal(read(DIST, name), read(SRC, name), `${name} is stale: run make -C web build`);
   assert.deepEqual(JSON.parse(read(DIST, 'site-data.json')), siteData(), 'site-data.json is stale: run make -C web build');
+  assert.equal(read(DIST, 'swap-recorded.json'), recordedSwaps(), 'swap-recorded.json is stale: run make -C web build');
 });
 
 test('everything the page loads is in dist, and nothing is loaded from elsewhere', () => {
@@ -26,11 +29,12 @@ test('everything the page loads is in dist, and nothing is loaded from elsewhere
   const present = readdirSync(DIST);
   for (const name of wanted) assert.ok(present.includes(name), `${name} is referenced but not in dist`);
   const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
-  assert.match(csp, /connect-src 'self' https:\/\/api\.github\.com https:\/\/raw\.githubusercontent\.com;/);
+  assert.match(csp, /connect-src 'self' https:\/\/api\.github\.com https:\/\/raw\.githubusercontent\.com https:\/\/test\.rpc\.fastnear\.com;/);
+  assert.ok(csp.includes(`connect-src 'self' ${'https://api.github.com https://raw.githubusercontent.com'} ${new URL(SWAP_CONFIG.rpcUrl).origin};`), 'the Swap\'s RPC origin is allowed by the CSP');
   assert.match(csp, /^default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'/);
   for (const name of sources) {
     const hosts = [...read(SRC, name).matchAll(/https?:\/\/([\w.-]+)/g)].map((m) => m[1]);
-    for (const host of hosts) assert.ok(['api.github.com', 'raw.githubusercontent.com', 'github.com'].includes(host), `${name} mentions ${host}`);
+    for (const host of hosts) assert.ok(['api.github.com', 'raw.githubusercontent.com', 'github.com', 'test.rpc.fastnear.com', 'testnet.near.rocks'].includes(host), `${name} mentions ${host}`);
   }
   assert.doesNotMatch(read(SRC, 'style.css'), /@import|url\(/);
 });
@@ -81,4 +85,21 @@ test('the scan buttons ship disabled and are enabled only once the scanner has l
   const enabled = app.indexOf("$(id).disabled = false");
   assert.ok(failure > 0 && enabled > failure, 'the buttons are enabled after the load failure has returned, so a failed load leaves them disabled');
   assert.equal(app.match(/disabled = false/g).length, 1, 'nothing else enables them');
+});
+
+test('the Swap comes first on the page, and its small print says the key is public on purpose', () => {
+  const at = (needle) => html.indexOf(needle);
+  assert.ok(at('class="swap"') > 0 && at('class="swap"') < at('class="intro"') && at('class="intro"') < at('class="bench"'));
+  assert.match(html, /The key in this page is public on purpose: it can only call <code>flip<\/code> on a demo contract/);
+  assert.match(read(SRC, 'swap-config.js'), /PUBLIC ON PURPOSE/);
+  assert.match(html, /<h1 id="swap-title">/);
+  assert.equal([...html.matchAll(/<h1\b/g)].length, 1);
+});
+
+test('the Swap config is either empty, so the page shows the recording, or complete with a recording that parses', () => {
+  const required = ['chameleonId', 'switchId', 'registryId', 'flipKey'];
+  const filled = required.filter((key) => SWAP_CONFIG[key] !== '');
+  assert.ok(filled.length === 0 || filled.length === required.length, `half-filled Swap config: ${filled}`);
+  assert.equal(new URL(SWAP_CONFIG.rpcUrl).protocol, 'https:');
+  if (filled.length) assert.ok(parseRecorded(JSON.parse(read(DIST, 'swap-recorded.json'))), 'a live Swap needs demo/swap/recorded.json for the fallback');
 });

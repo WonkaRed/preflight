@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "tool": {
+    "name": "preflight",
+    "version": "0.1.0"
+  },
+  "target": "demo/swap/chameleon/patched",
+  "summary": {
+    "files_scanned": 1,
+    "test_files_skipped": 0,
+    "findings": 0,
+    "by_severity": {
+      "info": 0,
+      "low": 0,
+      "medium": 0,
+      "high": 0,
+      "critical": 0
+    }
+  },
+  "findings": []
+}

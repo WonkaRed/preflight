@@ -1,0 +1,130 @@
+{
+  "network": "testnet",
+  "rpc": "https://test.rpc.fastnear.com",
+  "chameleon": "chameleon.preflight-guard.testnet",
+  "switch": "switch.preflight-guard.testnet",
+  "registry": "registry.preflight-guard.testnet",
+  "recordedAt": "2026-11-11T18:19:03.020Z",
+  "flips": [
+    {
+      "n": 1,
+      "txHash": "6LcXC8ehGsaukGN9JuKe7StYTT2Us51jn5LhYwceY4bp",
+      "explorerUrl": "https://testnet.near.rocks/tx/6LcXC8ehGsaukGN9JuKe7StYTT2Us51jn5LhYwceY4bp",
+      "blockHeight": 277251116,
+      "blockHash": "GPSvA5vgzzxGdq19wh7zCXPnjpPyEXAEgT2iXHmATJyM",
+      "signer": "switch.preflight-guard.testnet (flip key ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL)",
+      "before": {
+        "live": "patched",
+        "codeHash": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj",
+        "decision": "allow",
+        "verdict": {
+          "status": "Safe",
+          "rule_ids": [],
+          "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-patched.json"
+        }
+      },
+      "after": {
+        "live": "vulnerable",
+        "codeHash": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
+        "decision": "block",
+        "verdict": {
+          "status": "Unsafe",
+          "rule_ids": [
+            "PF001"
+          ],
+          "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-vulnerable.json"
+        }
+      }
+    },
+    {
+      "n": 2,
+      "txHash": "72WhNT2pHp1LjYLgfEZkQz4jwpXgrEmL2pzGnedmVB2a",
+      "explorerUrl": "https://testnet.near.rocks/tx/72WhNT2pHp1LjYLgfEZkQz4jwpXgrEmL2pzGnedmVB2a",
+      "blockHeight": 277251147,
+      "blockHash": "8hXAv7eMUfTd9sNFku3GkjM3eUiRgrSZWTVa6X89RZhp",
+      "signer": "switch.preflight-guard.testnet (flip key ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL)",
+      "before": {
+        "live": "vulnerable",
+        "codeHash": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
+        "decision": "block",
+        "verdict": {
+          "status": "Unsafe",
+          "rule_ids": [
+            "PF001"
+          ],
+          "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-vulnerable.json"
+        }
+      },
+      "after": {
+        "live": "patched",
+        "codeHash": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj",
+        "decision": "allow",
+        "verdict": {
+          "status": "Safe",
+          "rule_ids": [],
+          "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-patched.json"
+        }
+      }
+    },
+    {
+      "n": 3,
+      "txHash": "x1okFKCXPLi6kTG8mavhKhpggZqbQ8GnezppenkMCu1",
+      "explorerUrl": "https://testnet.near.rocks/tx/x1okFKCXPLi6kTG8mavhKhpggZqbQ8GnezppenkMCu1",
+      "blockHeight": 277251179,
+      "blockHash": "8Q5psDEy81PvC7zyrEqJGFkcrUaYwq9BB8VqnfwyHsZx",
+      "signer": "switch.preflight-guard.testnet (flip key ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL)",
+      "before": {
+        "live": "patched",
+        "codeHash": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj",
+        "decision": "allow",
+        "verdict": {
+          "status": "Safe",
+          "rule_ids": [],
+          "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-patched.json"
+        }
+      },
+      "after": {
+        "live": "vulnerable",
+        "codeHash": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
+        "decision": "block",
+        "verdict": {
+          "status": "Unsafe",
+          "rule_ids": [
+            "PF001"
+          ],
+          "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-vulnerable.json"
+        }
+      }
+    },
+    {
+      "n": 4,
+      "txHash": "Bs7UpkMmycW2U69SCfLNUrU84DEmazZkU4s46v7wFaXK",
+      "explorerUrl": "https://testnet.near.rocks/tx/Bs7UpkMmycW2U69SCfLNUrU84DEmazZkU4s46v7wFaXK",
+      "blockHeight": 277251211,
+      "blockHash": "69P6AT554PtRbfgScgBSLGrnzPKX4Senj8uKC41e4nWo",
+      "signer": "switch.preflight-guard.testnet (flip key ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL)",
+      "before": {
+        "live": "vulnerable",
+        "codeHash": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
+        "decision": "block",
+        "verdict": {
+          "status": "Unsafe",
+          "rule_ids": [
+            "PF001"
+          ],
+          "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-vulnerable.json"
+        }
+      },
+      "after": {
+        "live": "patched",
+        "codeHash": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj",
+        "decision": "allow",
+        "verdict": {
+          "status": "Safe",
+          "rule_ids": [],
+          "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-patched.json"
+        }
+      }
+    }
+  ]
+}

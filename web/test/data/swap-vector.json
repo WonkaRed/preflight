@@ -1,0 +1,19 @@
+{
+  "generatedBy": "near-api-js 7.4.0 (createTransaction, encodeTransaction, SignedTransaction)",
+  "note": "A throwaway key (seed 01..20) used only for this vector.",
+  "secretKey": "ed25519:2Ana1pUpv2ZbMVkwF5FXapYeBEjdxDatLn7nvJkhgTSdZd8hbDHTd21as7EAsg7ypityqfsw2pMQKJcVDVcAEsd",
+  "publicKey": "ed25519:9C6hybhQ6Aycep9jaUnP6uL9ZYvDjUp1aSkFWPUFJtpj",
+  "tx": {
+    "signerId": "switch.example.testnet",
+    "receiverId": "switch.example.testnet",
+    "nonce": "1234567890123",
+    "blockHash": "4Hb7yQ9dEPm1b8uVQe7ZcXv3m9Zr2rQ3sWjKq7oV1NfT",
+    "method": "flip",
+    "argsJson": "{}",
+    "gas": "10000000000000",
+    "deposit": "0"
+  },
+  "txHex": "160000007377697463682e6578616d706c652e746573746e65740079b5562e8fe654f94078b112e8a98ba7901f853ae695bed7e0e3910bad049664cb04fb711f010000160000007377697463682e6578616d706c652e746573746e657430d2eefea332e2c8b06161edcdd114992a8be4241c6756a2fd24a4ebe80884aa010000000204000000666c6970020000007b7d00a0724e1809000000000000000000000000000000000000",
+  "txHash": "AUDsbnEFccrBxD6Tk8kiundjuvBhBAwZCEoaExDftJ7S",
+  "signedBase64": "FgAAAHN3aXRjaC5leGFtcGxlLnRlc3RuZXQAebVWLo/mVPlAeLES6KmLp5AfhTrmlb7X4OORC60ElmTLBPtxHwEAABYAAABzd2l0Y2guZXhhbXBsZS50ZXN0bmV0MNLu/qMy4siwYWHtzdEUmSqL5CQcZ1ai/SSk6+gIhKoBAAAAAgQAAABmbGlwAgAAAHt9AKByThgJAAAAAAAAAAAAAAAAAAAAAAAAADFPvNXOuoNBQjV4dDNbeocUni1m9t71BUwXbq00UDYWUNBYgyPSxkY0Rm77EGpMMG7J890aDVJhTU9/1OWw+Qw="
+}

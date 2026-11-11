@@ -1,0 +1,74 @@
+{
+  "network": "testnet",
+  "parent": "preflight-guard.testnet",
+  "registry": "registry.preflight-guard.testnet",
+  "auditor": "auditor.preflight-guard.testnet",
+  "chameleon": "chameleon.preflight-guard.testnet",
+  "switch": "switch.preflight-guard.testnet",
+  "codeHashes": {
+    "vulnerable": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
+    "patched": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj"
+  },
+  "flipKey": {
+    "publicKey": "ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL",
+    "allowanceNear": "3"
+  },
+  "transactions": [
+    {
+      "step": "create-chameleon",
+      "signer": "preflight-guard.testnet",
+      "receiver": "chameleon.preflight-guard.testnet",
+      "hash": "8EFFRP3aGcfyZnhevkVufpbNoAAx7LUohjs37F1Y7fzx",
+      "what": "create chameleon.preflight-guard.testnet with 1.7 NEAR (full-access key ed25519:ASq44WavL6MD6CTpoU3BbmdKfddCL8GTft6u2X4hCgmg)"
+    },
+    {
+      "step": "create-switch",
+      "signer": "preflight-guard.testnet",
+      "receiver": "switch.preflight-guard.testnet",
+      "hash": "7pHiFQmZ8RGhGLZmBU6uwboSSKrMmzWTxFM7zKGiX5mr",
+      "what": "create switch.preflight-guard.testnet with 6 NEAR (full-access key ed25519:9VvxDdD7N7ieMQqkQcbipUnSdky3yGcjm2v5qvJTYZfV)"
+    },
+    {
+      "step": "deploy-chameleon",
+      "signer": "chameleon.preflight-guard.testnet",
+      "receiver": "chameleon.preflight-guard.testnet",
+      "hash": "CbrKEgcbgJRNsJdNPaeHEmBqm469h2DZXe8fxpFkgMTe",
+      "what": "deploy chameleon_vulnerable on chameleon.preflight-guard.testnet and call new({switch, treasury: preflight-guard.testnet}) in the same transaction"
+    },
+    {
+      "step": "deploy-switch",
+      "signer": "switch.preflight-guard.testnet",
+      "receiver": "switch.preflight-guard.testnet",
+      "hash": "7fGD3BWnedSe8NT8tMsKzCRh4q95VvJis3cFVN4DvHk1",
+      "what": "deploy swap_switch on switch.preflight-guard.testnet and call new(chameleon.preflight-guard.testnet, vulnerable, 10000 ms, both builds) in the same transaction"
+    },
+    {
+      "step": "publish-vulnerable",
+      "signer": "auditor.preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "Ep8c8PqhNkGbzQRdftzDzCYGCKabqqfKwCLUpSZTgnpJ",
+      "what": "publish Unsafe PF001 for the vulnerable build's code hash HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa"
+    },
+    {
+      "step": "publish-patched",
+      "signer": "auditor.preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "4USGVyw1DWRaRk4xuPr8oHp2EMVdDyuqTxzR9y4MRAPh",
+      "what": "publish Safe (no rules) for the patched build's code hash BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj"
+    },
+    {
+      "step": "scope-flip-key",
+      "signer": "switch.preflight-guard.testnet",
+      "receiver": "switch.preflight-guard.testnet",
+      "hash": "2z1byPikKVYfgSXCWAF67cMFfFz854TvkaHd86hfzwnV",
+      "what": "add a function-call key (ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL) to switch.preflight-guard.testnet: may call flip on switch.preflight-guard.testnet only, gas allowance 3 NEAR, no deposit"
+    },
+    {
+      "step": "seal-chameleon",
+      "signer": "chameleon.preflight-guard.testnet",
+      "receiver": "chameleon.preflight-guard.testnet",
+      "hash": "7eQw3s93kY29Taz65tsW2SHRAScyhWLAqKF5Jzpr8WoN",
+      "what": "delete the chameleon's access key(s) ed25519:ASq44WavL6MD6CTpoU3BbmdKfddCL8GTft6u2X4hCgmg: only the switch can change its code"
+    }
+  ]
+}

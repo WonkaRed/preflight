@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com; base-uri 'none'; form-action 'none'">
-<title>Preflight: scan NEAR contract source in your browser</title>
-<meta name="description" content="Paste NEAR smart contract source or name a public GitHub repository. Preflight shows which known vulnerability patterns it finds, each linked to its proof. Runs in the page; nothing is uploaded.">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://test.rpc.fastnear.com; base-uri 'none'; form-action 'none'">
+<title>Preflight: verdicts keyed to the code, not the address</title>
+<meta name="description" content="One NEAR testnet address whose contract code flips between a vulnerable and a patched build. An allowlist by account id keeps saying allow; Preflight looks the verdict up by the hash of the deployed code. Also scans contract source in your browser.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="style.css">
 </head>
@@ -18,9 +18,41 @@
     <p class="brand"><b>Preflight</b><span id="rule-count">scanner for NEAR contracts</span></p>
   </header>
 
+  <section class="swap" aria-labelledby="swap-title">
+    <h1 id="swap-title">The address never changes. The code does.</h1>
+    <p class="swap-lede">Verdicts keyed to the code, not the address.</p>
+    <p class="swap-status" id="swap-status" data-tone="loading" role="status">Reading the chain.</p>
+    <p class="swap-detail" id="swap-detail"></p>
+    <p class="swap-address"><code id="swap-address">no address yet</code></p>
+
+    <div class="swap-act">
+      <button type="button" class="btn swap-btn" id="swap-button" disabled>Swap the code</button>
+      <p class="swap-flips" id="swap-flips"></p>
+    </div>
+    <div class="swap-cards">
+      <article class="card" id="swap-trust" data-tone="trust">
+        <h2>Trusts the address</h2>
+        <p class="card-sub">An allowlist of account ids. Many agents and wallets decide this way.</p>
+        <p class="word" id="trust-word">No data</p>
+        <p class="card-line" id="trust-note"></p>
+        <p class="hashline"><span>Looked at</span><b>the account id, never the code</b></p>
+      </article>
+      <article class="card" id="swap-pf" data-tone="none">
+        <h2>Preflight</h2>
+        <p class="card-sub">Looks up the verdict for the hash of the code deployed right now.</p>
+        <p class="word"><span id="pf-word">...</span><span class="rules" id="pf-rules"></span></p>
+        <p class="card-line" id="pf-line"></p>
+        <p class="hashline"><span id="pf-build"></span><code id="pf-hash"></code></p>
+      </article>
+    </div>
+
+    <p class="swap-tx" id="swap-tx" role="status"></p>
+    <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account we control, so this shows what each check keys on, not that a verdict is right.</p>
+  </section>
+
   <section class="intro">
-    <h1>Paste a NEAR contract. See what Preflight finds.</h1>
-    <p>Preflight reads Rust source for known vulnerability patterns, each one proved on a vulnerable and a patched contract. It runs in this page. Nothing you paste is uploaded.</p>
+    <h2>Scan a contract's source</h2>
+    <p>Paste Rust source or name a public GitHub repository. The scanner runs in this page and nothing you paste is uploaded.</p>
     <p>This scan is one part of Preflight. The others are a registry on NEAR that stores each verdict under the SHA-256 of the deployed wasm, and a guard that reads the verdict and refuses to let an AI agent sign a call to code marked Unsafe. Both are in the <a href="https://github.com/WonkaRed/preflight">repository</a>.</p>
   </section>
 

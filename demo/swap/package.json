@@ -1,0 +1,24 @@
+{
+  "name": "@preflight/swap",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.22.2"
+  },
+  "scripts": {
+    "build": "tsc",
+    "deploy": "node --disable-warning=ExperimentalWarning scripts/deploy.ts",
+    "flip": "node --disable-warning=ExperimentalWarning scripts/flip.ts",
+    "record": "node --disable-warning=ExperimentalWarning scripts/record.ts",
+    "check": "node --disable-warning=ExperimentalWarning scripts/check.ts"
+  },
+  "dependencies": {
+    "near-api-js": "7.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
+  }
+}

@@ -3,7 +3,7 @@ resolver = "3"
 members = ["scanner", "exploits", "web-scan"]
 # Contract crates only build for wasm32 (near-sdk refuses a native `cargo build`), so they live in their own
 # workspaces and `cargo build --workspace` here always works.
-exclude = ["fixtures", "registry"]
+exclude = ["fixtures", "registry", "demo/swap"]
 
 [workspace.package]
 version = "0.1.0"

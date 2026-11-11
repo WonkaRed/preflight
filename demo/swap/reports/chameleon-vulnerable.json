@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "tool": {
+    "name": "preflight",
+    "version": "0.1.0"
+  },
+  "target": "demo/swap/chameleon/vulnerable",
+  "summary": {
+    "files_scanned": 1,
+    "test_files_skipped": 0,
+    "findings": 1,
+    "by_severity": {
+      "info": 0,
+      "low": 0,
+      "medium": 0,
+      "high": 1,
+      "critical": 0
+    }
+  },
+  "findings": [
+    {
+      "rule_id": "PF001",
+      "title": "Callback not marked #[private]",
+      "severity": "high",
+      "file": "src/lib.rs",
+      "line": 55,
+      "column": 12,
+      "item": "Vault::on_deposit",
+      "message": "`Vault::on_deposit` is scheduled on the contract itself with `ext(..)` but is not marked `#[private]`, so any account can call it directly",
+      "help": "add #[private] to the callback so only the contract itself can call it"
+    }
+  ]
+}

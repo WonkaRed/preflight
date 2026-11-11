@@ -1,0 +1,130 @@
+{
+  "network": "testnet",
+  "rpc": "https://test.rpc.fastnear.com",
+  "chameleon": "chameleon.example.testnet",
+  "switch": "switch.example.testnet",
+  "registry": "registry.example.testnet",
+  "recordedAt": "2026-11-11T09:41:00.000Z",
+  "flips": [
+    {
+      "n": 1,
+      "txHash": "EJJ5EvSVGHFMv2mWspLPaCFsdk4sD6S2zq6v5HU7SKpV",
+      "explorerUrl": "https://testnet.near.rocks/tx/x",
+      "blockHeight": 1001,
+      "blockHash": "EeRAW6991Gt6SuHRJ7XTiBajRfMkcZoMsV5uXgStinPx",
+      "signer": "switch.example.testnet",
+      "before": {
+        "live": "vulnerable",
+        "codeHash": "FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i",
+        "decision": "block",
+        "verdict": {
+          "status": "Unsafe",
+          "rule_ids": [
+            "PF001"
+          ],
+          "report_url": "https://example.com/r"
+        }
+      },
+      "after": {
+        "live": "patched",
+        "codeHash": "89eehheG1Upb3mJpkuuCUXcqFSavP7wch7vroQrvLNZQ",
+        "decision": "allow",
+        "verdict": {
+          "status": "Safe",
+          "rule_ids": [],
+          "report_url": "https://example.com/r"
+        }
+      }
+    },
+    {
+      "n": 2,
+      "txHash": "GB41KHoq7z6spiKpgspy1Z4vr7PZkaRmvXtR3S4zJxWn",
+      "explorerUrl": "https://testnet.near.rocks/tx/x",
+      "blockHeight": 1002,
+      "blockHash": "53hmaXeteDCtcWwiLyiRmEpvAH7ALjjnVApisZTZZswa",
+      "signer": "switch.example.testnet",
+      "before": {
+        "live": "patched",
+        "codeHash": "89eehheG1Upb3mJpkuuCUXcqFSavP7wch7vroQrvLNZQ",
+        "decision": "allow",
+        "verdict": {
+          "status": "Safe",
+          "rule_ids": [],
+          "report_url": "https://example.com/r"
+        }
+      },
+      "after": {
+        "live": "vulnerable",
+        "codeHash": "FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i",
+        "decision": "block",
+        "verdict": {
+          "status": "Unsafe",
+          "rule_ids": [
+            "PF001"
+          ],
+          "report_url": "https://example.com/r"
+        }
+      }
+    },
+    {
+      "n": 3,
+      "txHash": "4DKGXbjonxDTbeChQi5VSBczGXu7mo6p2xhVTUNwozPH",
+      "explorerUrl": "https://testnet.near.rocks/tx/x",
+      "blockHeight": 1003,
+      "blockHash": "6pXYXHDeBWfKTqUBbZaACSsBRUAze3h9PtKWgCXuZsiS",
+      "signer": "switch.example.testnet",
+      "before": {
+        "live": "vulnerable",
+        "codeHash": "FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i",
+        "decision": "block",
+        "verdict": {
+          "status": "Unsafe",
+          "rule_ids": [
+            "PF001"
+          ],
+          "report_url": "https://example.com/r"
+        }
+      },
+      "after": {
+        "live": "patched",
+        "codeHash": "89eehheG1Upb3mJpkuuCUXcqFSavP7wch7vroQrvLNZQ",
+        "decision": "allow",
+        "verdict": {
+          "status": "Safe",
+          "rule_ids": [],
+          "report_url": "https://example.com/r"
+        }
+      }
+    },
+    {
+      "n": 4,
+      "txHash": "4zuNYgntN5bZCRKF9Z5tZH2ZLF2ggbJUZy39pA2bCgCj",
+      "explorerUrl": "https://testnet.near.rocks/tx/x",
+      "blockHeight": 1004,
+      "blockHash": "AaxD2MeK5iC4Y6U5VUMiNYMdUzeRyYSBfmfVRRNgTcQ1",
+      "signer": "switch.example.testnet",
+      "before": {
+        "live": "patched",
+        "codeHash": "89eehheG1Upb3mJpkuuCUXcqFSavP7wch7vroQrvLNZQ",
+        "decision": "allow",
+        "verdict": {
+          "status": "Safe",
+          "rule_ids": [],
+          "report_url": "https://example.com/r"
+        }
+      },
+      "after": {
+        "live": "vulnerable",
+        "codeHash": "FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i",
+        "decision": "block",
+        "verdict": {
+          "status": "Unsafe",
+          "rule_ids": [
+            "PF001"
+          ],
+          "report_url": "https://example.com/r"
+        }
+      }
+    }
+  ]
+}

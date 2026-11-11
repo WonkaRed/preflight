@@ -3,6 +3,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { fakeDocument, walk } from './fake-dom.mjs';
 import * as P from '../src/report.js';
 import { request, scanner } from './helpers.mjs';
 
@@ -13,19 +14,6 @@ const clone = (o) => structuredClone(o);
 
 const finding = (severity, file = 'src/lib.rs', line = 1, column = 1, rule_id = 'PF001') =>
   ({ rule_id, title: 't', severity, file, line, column, item: 'i', message: 'm', help: 'h' });
-
-// A DOM stand-in that records what the renderer builds and refuses every way of parsing markup.
-function fakeDocument() {
-  const markup = () => { throw new Error('markup parsing is forbidden'); };
-  const node = (tag) => {
-    const el = { tag, attrs: {}, kids: [], setAttribute(k, v) { this.attrs[k] = v; }, append(...n) { this.kids.push(...n); }, addEventListener() {} };
-    for (const name of ['innerHTML', 'outerHTML']) Object.defineProperty(el, name, { set: markup });
-    el.insertAdjacentHTML = markup;
-    return el;
-  };
-  return { createElement: node, createTextNode: (text) => ({ text }) };
-}
-function walk(n, visit) { visit(n); (n.kids || []).forEach((k) => walk(k, visit)); }
 
 test('the scanner\'s own reports and the hostile sample validate, and the report is returned untouched', () => {
   for (const name of ['pf001-vulnerable', 'pf001-patched', 'hostile-strings']) {

@@ -1,6 +1,6 @@
 # Preflight in the browser
 
-A static page that runs the scanner where the visitor is: paste Rust contract source, pick a bundled vulnerable example
+A static page. At the top is the Swap: one NEAR testnet address whose code a button swaps between a vulnerable and a patched build, with a check that trusts the address (always ALLOW) beside Preflight, which looks the verdict up by the hash of the deployed code (BLOCK, then ALLOW). Below it, the scanner runs where the visitor is: paste Rust contract source, pick a bundled vulnerable example
 (and its patched twin), or name a public GitHub repository, and read the findings, each linked to its rule's proof (the
 fixture pair and the sandbox exploit test). No server, no account, no install. The Rust scanner is compiled to
 WebAssembly; the page is plain ES modules with no bundler.
@@ -25,11 +25,16 @@ make -C web test     # build, then run the tests
 | `src/session.js` | What a scan start, finish or failure does to the page: the pane shows "Scanning owner/repo" at once, the newest scan owns the pane, and every failure except being replaced is shown as a problem. |
 | `src/github.js` | Public repository reader: one request for the commit the ref points at and one for that commit's file list (both api.github.com), then one raw.githubusercontent.com request per `.rs` and `Cargo.toml` file, all pinned to that commit (plus the `Cargo.toml` of each folder above a sub-path, where the workspace's build profile usually is). No token. Limits are in `LIMITS` (a file over 1 MB is never downloaded, manifests included) and every cut, and every skipped Git submodule, is shown to the visitor. |
 | `src/report.js` | Report validation, severity and verdict rules, and the DOM builders. Scan text reaches the page only as text nodes, after control and bidirectional characters are replaced. |
+| `src/near.js` | The little of NEAR the Swap needs, with no library: base58, Borsh for one function-call transaction, and an ed25519 signature from WebCrypto. `test/near.test.mjs` checks every byte against a transaction built and signed by near-api-js 7.4.0 (`test/data/swap-vector.json`). |
+| `src/swap.js` | The Swap's controller: reads the chameleon's code hash and the registry verdict over RPC, sends `flip`, polls, and falls back to the recording when the RPC is down or the key's allowance is spent. Config validation (`readConfig`) and the recording parser (`parseRecorded`) live here. No DOM. |
+| `src/swap-view.js` | `viewModel` (state to plain strings, tested directly), `paint` (writes them into the section as text) and `mountSwap`. |
+| `src/swap-config.js` | The one place the Swap is configured; see below. |
+| `swap-recorded.json` (in `dist/`) | A copy of `../demo/swap/recorded.json`, written by `tools/build.mjs` (the JSON `null` when the file is absent). |
 | `src/app.js`, `index.html`, `style.css` | The page. |
 | `src/config.js` | `REPO_TREE_URL`: where the proof links point (this repository's `main` tree on GitHub). A fork sets its own; left empty, the paths show as plain text. |
 | `tools/site-data.mjs` | Reads `fixtures/` and `exploits/` at build time: the bundled examples and each rule's proof paths. Add a rule with its fixtures and exploit test and its links appear with no change here. |
 | `tools/build.mjs` | Assembles `dist/`. |
-| `test/` | Node's test runner against the real built wasm (`scanner`), the renderer (`report`), the GitHub reader with a fake `fetch` (`github`), the scan worker's client (`scan-client`), the page's scan lifecycle (`session`) and the built folder (`dist`). |
+| `test/` | Node's test runner against the real built wasm (`scanner`), the renderer (`report`), the Swap's serializer (`near`), controller (`swap`, against a fake NEAR node in `swap-chain.mjs`) and view (`swap-view`), the GitHub reader with a fake `fetch` (`github`), the scan worker's client (`scan-client`), the page's scan lifecycle (`session`) and the built folder (`dist`). |
 
 The tests check the wasm output against the native command line, byte for byte, for both variants of every fixture and for a
 tree of several crates (`test/data/crates`: a build script, a nested workspace root, a loose file).
@@ -37,6 +42,22 @@ tree of several crates (`test/data/crates`: a build script, a nested workspace r
 The one place the two differ is depth: the wasm module has an 8 MiB stack (`../web-scan/build.rs`), enough for about 2000
 levels of nested blocks, parentheses or `match`. Code nested deeper ends the scan with "nested too deeply for the
 in-browser build"; scan it with `preflight` on the command line.
+
+## Configuring the Swap
+
+Fill `src/swap-config.js`, then `make -C web build`. With `chameleonId`, `switchId`, `registryId` and `flipKey` empty (the shipped state) the page makes no network call and shows the recording, labeled as recorded.
+
+| Field | What |
+| --- | --- |
+| `chameleonId` | The account whose code the button swaps. |
+| `switchId` | The contract with `flip()` and `status()`. |
+| `registryId` | The registry holding the verdicts for both builds (`get_verdict`). |
+| `flipKey` | `ed25519:` secret key, public on purpose: a function-call key limited to `flip` with a small allowance. |
+| `flipSignerId` | The account that holds that key; empty means `switchId`. |
+| `flipGasTgas` | Gas attached to `flip` (default 150; the switch needs at least 100). |
+| `rpcUrl`, `explorerUrl` | NEAR testnet RPC (also named in the page's CSP) and the explorer behind every link. |
+
+`status()` is read as `{ vulnerable: { code_hash }, patched: { code_hash }, flips, next_flip_ms }` and the registry's `get_verdict(code_hash)` as `{ code_hash, status: Safe | Warn | Unsafe, rule_ids }` or `null`. The page checks the code hash by hashing `view_code` itself, so a wrong answer from the RPC cannot show a verdict for code that is not deployed. A hash with no verdict shows WARN, as the guard does.
 
 ## Linking to a scan
 
@@ -49,9 +70,13 @@ raw.githubusercontent.com, whose limits GitHub does not publish), so about 30 sc
 
 Everything a scan returns, and everything GitHub sends, is untrusted. The code has no `innerHTML`, and the page's
 Content-Security-Policy allows scripts and styles from the page's own folder only and network requests to the page's
-folder, `api.github.com` and `raw.githubusercontent.com`. No fonts, scripts or images come from anywhere else. The policy is a
+folder, `api.github.com`, `raw.githubusercontent.com` and the Swap's RPC, `test.rpc.fastnear.com`. No fonts, scripts or images come from anywhere else. The policy is a
 `<meta>` tag, which a worker script does not inherit: a host that can set response headers should send the same policy as a
 `Content-Security-Policy` header too (the worker is loaded from the page's own folder and makes no requests).
+
+The Swap's key ships to every visitor, so it must be worth nothing: a function-call key on the switch limited to `flip`, a
+small gas allowance, testnet only. Transactions are signed in the browser with WebCrypto's Ed25519 (recent browsers only); a browser without it shows that and sends nothing. Everything from the RPC and the recording reaches
+the page as text, and links are built only from a validated hash or account id plus `explorerUrl`.
 
 ## What the headline says
 

@@ -1,0 +1,14 @@
+[package]
+name = "chameleon-vulnerable"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "The Swap: the vulnerable build of the chameleon vault"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+near-sdk.workspace = true
