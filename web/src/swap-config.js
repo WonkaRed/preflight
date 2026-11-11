@@ -9,14 +9,15 @@ export const SWAP_CONFIG = {
 
   // The one address the page is about: its contract code flips between a vulnerable and a patched build.
   chameleonId: 'chameleon.preflight-guard.testnet',
-  // The contract with `flip()` (at least 10 s between flips) and the view `status()`.
+  // The contract with `flip()` (it enforces a minimum time between flips) and the view `status()`.
   switchId: 'switch.preflight-guard.testnet',
   // The registry contract that holds a verdict for each of the two code hashes (`get_verdict`).
   registryId: 'registry.preflight-guard.testnet',
 
   // The key the browser signs `flip` with. It is PUBLIC ON PURPOSE: it is shipped to every visitor, so it must be a
-  // function-call access key limited to `flip` on `switchId`, with a small gas allowance, on a demo account that holds
-  // nothing. Anyone who copies it can do exactly what the button does and no more. Never put any other key here.
+  // function-call access key limited to `flip` on `switchId`, with a small gas allowance, on a testnet
+  // account. Anyone who copies it can do exactly what the button does and no more; the worst a copier can do is spend the demo's gas
+  // allowance. Never put any other key here.
   // The form NEAR prints: ed25519:<base58 of 64 bytes>.
   flipKey: 'ed25519:38CTPSHm2DunGh3YU8Yy6zPa3dAgZRZJNNMJRHXaG3CjmpvCaUcwLunSqUGYybrQ6ESK9fXNKB6bQ1hhRDBYAsk6',
   // The account that holds that key. Empty: the key is on `switchId` itself.

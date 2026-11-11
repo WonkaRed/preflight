@@ -22,13 +22,14 @@ jobs:
           rustup toolchain install --no-self-update
           rustup show active-toolchain
           rustup target list --installed | grep -x wasm32-unknown-unknown
-      # The repository holds three cargo workspaces (the contract crates cannot build natively, see Cargo.toml).
+      # The repository holds four cargo workspaces (the contract crates cannot build natively, see Cargo.toml).
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
             .
             registry
             fixtures
+            demo/swap
       # guard/package.json "engines" and guard/.npmrc (engine-strict) require this version or newer.
       - uses: actions/setup-node@v7
         with:

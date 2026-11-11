@@ -3,7 +3,7 @@
 [target.wasm32-unknown-unknown]
 rustflags = ["--cfg", "near", "-C", "link-arg=-s"]
 
-# The root, fixtures/ and registry/ are separate cargo workspaces; one shared target dir builds near-sdk once.
+# The root, fixtures/, registry/ and demo/swap/ are separate cargo workspaces; one shared target dir builds near-sdk once.
 # `CARGO_TARGET_DIR`, when set, wins.
 [build]
 target-dir = "target"

@@ -1,5 +1,6 @@
 # The Swap. `make build` makes the three wasm files that are deployed (wasm/ and wasm/SHA256SUMS), `make reports`
-# runs the scanner over the two chameleon sources, `make test` runs the sandbox tests. See README.md.
+# runs the scanner over the two chameleon sources, `make test` runs the sandbox tests, `make watchdog` prints the
+# status of the money and repairs it. See README.md.
 
 # The compiler comes from rust-toolchain.toml; an exported RUSTUP_TOOLCHAIN would silently override it.
 unexport RUSTUP_TOOLCHAIN
@@ -15,7 +16,7 @@ CONTRACTS := chameleon_vulnerable chameleon_patched swap_switch
 # Its own target dir, so the remapped build never rebuilds what the other workspaces share.
 TARGET := $(abspath target)
 
-.PHONY: build reports test check
+.PHONY: build reports test check watchdog
 
 build:
 	RUSTFLAGS='$(WASM_FLAGS)' CARGO_TARGET_DIR='$(TARGET)' cargo build --locked --release --target wasm32-unknown-unknown -p chameleon-vulnerable -p chameleon-patched -p swap-switch
@@ -35,3 +36,7 @@ test:
 
 check:
 	./check.sh
+
+# One status line for the money (spare balances, flip allowance) and the repairs; needs PREFLIGHT_TESTNET_KEYS to repair.
+watchdog:
+	npm run --silent watchdog

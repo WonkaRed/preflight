@@ -1,11 +1,17 @@
 // One-time setup of the Swap on testnet under a parent account you control.
 //
 //   PREFLIGHT_TESTNET_KEYS=<dir> npm run deploy -- --parent <you>.testnet --wasm-dir <dir> --reports <dir> [--chameleon-near 1.7] [--switch-near 6] [--allowance 3] [--seal]
+//   PREFLIGHT_TESTNET_KEYS=<dir> npm run deploy -- --parent <you>.testnet --wasm-dir <dir> --reports <dir> --generation 2 [--switch-topup 8] [--allowance 5] [--chameleon-topup 0.8]
 //
 // It creates chameleon.<parent> and switch.<parent>, deploys the vulnerable build on the chameleon and the switch
 // (which stores both builds), has the registry's auditor publish the scanner's verdict for each build, and adds the
 // flip key to the switch: a function-call key that may call `flip` on the switch and nothing else. With --seal it
 // also deletes the chameleon's own full-access key, so that only the switch can ever change its code.
+// A second deployment (--generation 2 or more) puts new builds behind the same two accounts: the parent publishes the
+// new builds' verdicts and tops both accounts up, then one transaction signed by the switch's own key deploys the new
+// switch code over the old, calls its `new` (which replaces the state, the stored builds included) and replaces the
+// flip key by itself with a fresh allowance, and one flip puts the new vulnerable build on the chameleon. The
+// chameleon's own code is changed by that flip only, and it keeps no key.
 // Private keys go to <dir>/<account>.key and <dir>/swap-flip-public.key (mode 0600) and are never printed. Every
 // transaction is recorded in demo/swap/deployment.json as it happens, and a rerun skips the recorded steps.
 // TESTNET ONLY: the RPC must report chain_id "testnet".
@@ -16,23 +22,24 @@ import { join } from "node:path";
 import { parseArgs, promisify } from "node:util";
 import { Account, JsonRpcProvider, KeyPair, KeyPairSigner, PublicKey, actions, baseEncode, nearToYocto, teraToGas } from "near-api-js";
 import type { Action } from "near-api-js";
-import { DEFAULT_TESTNET_RPC, DEPLOYMENT_FILE, assertTestnetChain, chainCodeHash, explorerTxUrl, keyPath, loadSwapDeployment, readSecretKey, type SwapDeployment, viewJson } from "./lib.ts";
+import { DEFAULT_TESTNET_RPC, DEPLOYMENT_FILE, assertTestnetChain, chainCodeHash, explorerTxUrl, keyPath, loadSwapDeployment, readSecretKey, sendFlip, type SwapDeployment, viewJson } from "./lib.ts";
 
-const USAGE = "usage: PREFLIGHT_TESTNET_KEYS=<dir> deploy --parent <account>.testnet --wasm-dir <dir> --reports <dir> [--rpc <url>] [--chameleon-near <n>] [--switch-near <n>] [--allowance <n>] [--seal]";
+const USAGE = "usage: PREFLIGHT_TESTNET_KEYS=<dir> deploy --parent <account>.testnet --wasm-dir <dir> --reports <dir> [--rpc <url>] [--chameleon-near <n>] [--switch-near <n>] [--allowance <n>] [--seal] [--generation <n> [--switch-topup <n>] [--chameleon-topup <n>]]";
 const REPORT_BASE = "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports";
 /** The switch refuses a flip sooner than this after the last one, so a script looping on the page's key cannot thrash the chameleon. */
-const MIN_INTERVAL_MS = 10_000;
+const MIN_INTERVAL_MS = 20_000;
 const PUBLISH_DEPOSIT = "0.01"; // attached to publish_verdict; the registry refunds what the storage does not need
 const PACE_MS = 700; // between transactions, so a public RPC is not hit in a burst
 /** Index of each build in the switch's Borsh `Build` enum. */
 const BUILD_VULNERABLE = 0;
+const BUILD_PATCHED = 1;
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 function options() {
   try {
     const { values } = parseArgs({
-      options: { parent: { type: "string" }, "wasm-dir": { type: "string" }, reports: { type: "string" }, rpc: { type: "string" }, "chameleon-near": { type: "string" }, "switch-near": { type: "string" }, allowance: { type: "string" }, seal: { type: "boolean" } },
+      options: { parent: { type: "string" }, "wasm-dir": { type: "string" }, reports: { type: "string" }, rpc: { type: "string" }, "chameleon-near": { type: "string" }, "switch-near": { type: "string" }, allowance: { type: "string" }, seal: { type: "boolean" }, generation: { type: "string" }, "switch-topup": { type: "string" }, "chameleon-topup": { type: "string" } },
       strict: true,
     });
     const keysDir = process.env["PREFLIGHT_TESTNET_KEYS"];
@@ -42,13 +49,15 @@ function options() {
       if (!/^\d+(\.\d{1,24})?$/.test(text)) throw new Error(`--${name} must be a plain decimal amount of NEAR, got ${JSON.stringify(text)}`);
       return text as `${number}`;
     };
-    return { keysDir, parent: values.parent, wasmDir: values["wasm-dir"], reports: values.reports, rpc: values.rpc ?? DEFAULT_TESTNET_RPC, chameleonNear: amount("chameleon-near", "1.7"), switchNear: amount("switch-near", "6"), allowance: amount("allowance", "3"), seal: values.seal === true };
+    const generation = Number(values.generation ?? "1");
+    if (!Number.isInteger(generation) || generation < 1) throw new Error("--generation must be a whole number, 1 or more");
+    return { generation, chameleonTopup: amount("chameleon-topup", "0.8"), switchTopup: amount("switch-topup", "8"), keysDir, parent: values.parent, wasmDir: values["wasm-dir"], reports: values.reports, rpc: values.rpc ?? DEFAULT_TESTNET_RPC, chameleonNear: amount("chameleon-near", "1.7"), switchNear: amount("switch-near", "6"), allowance: amount("allowance", "3"), seal: values.seal === true };
   } catch (error) {
     console.error(`${error instanceof Error ? error.message : String(error)}\n${USAGE}`);
     process.exit(2);
   }
 }
-const { keysDir, parent, wasmDir, reports, rpc, chameleonNear, switchNear, allowance, seal } = options();
+const { generation, chameleonTopup, switchTopup, keysDir, parent, wasmDir, reports, rpc, chameleonNear, switchNear, allowance, seal } = options();
 
 const registryId = `registry.${parent}`;
 const auditorId = `auditor.${parent}`;
@@ -83,16 +92,18 @@ async function loadOrStart(): Promise<SwapDeployment> {
 }
 const deployment = await loadOrStart();
 const save = (): Promise<void> => writeFile(DEPLOYMENT_FILE, `${JSON.stringify(deployment, null, 2)}\n`);
-const done = (step: string): boolean => deployment.transactions.some((tx) => tx.step === step);
+/** Steps of a later deployment carry its number, so each deployment is recorded on its own and a rerun skips what is done. */
+const stepName = (step: string): string => (generation === 1 ? step : `${step}-g${generation}`);
+const done = (step: string): boolean => deployment.transactions.some((tx) => tx.step === stepName(step));
 
 /** Signs and sends one transaction, waits for it to be final, and records it. */
 async function send(step: string, signer: Account, receiver: string, txActions: Action[], what: string): Promise<void> {
-  if (done(step)) return console.log(`skip ${step} (already recorded)`);
+  if (done(step)) return console.log(`skip ${stepName(step)} (already recorded)`);
   const outcome = await signer.signAndSendTransaction({ receiverId: receiver, actions: txActions, waitUntil: "FINAL", throwOnFailure: true });
   const hash = outcome.transaction.hash;
-  deployment.transactions.push({ step, signer: signer.accountId, receiver, hash, what });
+  deployment.transactions.push({ step: stepName(step), signer: signer.accountId, receiver, hash, what });
   await save();
-  console.log(`${step}: ${what}\n    ${explorerTxUrl(hash)}`);
+  console.log(`${stepName(step)}: ${what}\n    ${explorerTxUrl(hash)}`);
   await sleep(PACE_MS);
 }
 
@@ -118,11 +129,76 @@ async function main(): Promise<void> {
   const parentAccount = await accountFor(parent);
   const vulnerable = await wasm("chameleon_vulnerable");
   const patched = await wasm("chameleon_patched");
-  deployment.codeHashes = { vulnerable: codeHashOf(vulnerable), patched: codeHashOf(patched) };
+  const codeHashes = { vulnerable: codeHashOf(vulnerable), patched: codeHashOf(patched) };
+  if (generation > 1 && deployment.codeHashes.vulnerable !== "" && deployment.codeHashes.vulnerable !== codeHashes.vulnerable) {
+    deployment.retired = [...(deployment.retired ?? []), deployment.codeHashes];
+  }
+  deployment.codeHashes = codeHashes;
+
+  const publishVerdicts = async (): Promise<void> => {
+    // The auditor publishes the scanner's verdict for each build; rule ids come from the scanner's reports.
+    const auditor = await accountFor(auditorId);
+    for (const role of ["vulnerable", "patched"] as const) {
+      const reportFile = `chameleon-${role}.json`;
+      const reportBytes = await readFile(join(reports, reportFile));
+      const report = JSON.parse(reportBytes.toString("utf8")) as { findings: { rule_id: string }[] };
+      const ruleIds = [...new Set(report.findings.map((finding) => finding.rule_id))].sort();
+      const verdict = { code_hash: deployment.codeHashes[role], status: ruleIds.length === 0 ? "Safe" : "Unsafe", rule_ids: ruleIds, report_url: `${REPORT_BASE}/${reportFile}`, report_sha256: createHash("sha256").update(reportBytes).digest("hex") };
+      await send(`publish-${role}`, auditor, registryId, [actions.functionCall("publish_verdict", verdict, teraToGas("30"), nearToYocto(PUBLISH_DEPOSIT))], `publish ${verdict.status} ${verdict.rule_ids.join(",") || "(no rules)"} for the ${role} build's code hash ${verdict.code_hash}`);
+    }
+  };
+
+  /** The chain must hold exactly what was scanned, hashed and published, and the registry must have a verdict for each build. */
+  const verifyChain = async (expected: string[]): Promise<void> => {
+    const onChain = await chainCodeHash(rpc, chameleonId, "optimistic");
+    if (!expected.includes(onChain)) throw new Error(`${chameleonId} holds ${onChain}, none of ${expected.join(", ")}`);
+    for (const role of ["vulnerable", "patched"] as const) {
+      const verdict = (await viewJson(rpc, registryId, "get_verdict", { code_hash: deployment.codeHashes[role] }, "optimistic")) as { status?: string } | null;
+      if (verdict === null) throw new Error(`the registry has no verdict for the ${role} build`);
+      console.log(`registry verdict for the ${role} build: ${verdict.status}`);
+    }
+  };
+
+  const switchKey = await ensureKey(switchId);
+  const switchWasm = await wasm("swap_switch");
+  const initSwitch = (live: number): Buffer => Buffer.concat([borshString(chameleonId), Buffer.from([live]), borshU64(MIN_INTERVAL_MS), borshBytes(vulnerable), borshBytes(patched)]);
+  const flipKeyFile = keyPath(keysDir, "swap-flip-public");
+
+  if (generation > 1) {
+    // A second deployment. The chameleon is never redeployed: the new switch replaces the old one in place, in one
+    // transaction, so the page sees either the old switch or the new one, never a gap.
+    const flipKey = deployment.flipKey;
+    if (flipKey === null) throw new Error("deployment.json records no flip key to keep");
+    await publishVerdicts();
+    await send("topup-chameleon", parentAccount, chameleonId, [actions.transfer(nearToYocto(chameleonTopup))], `give ${chameleonId} ${chameleonTopup} NEAR for the new builds' storage and gas`);
+    await send("topup-switch", parentAccount, switchId, [actions.transfer(nearToYocto(switchTopup))], `give ${switchId} ${switchTopup} NEAR to pay for flips`);
+
+    // The same public key gets a fresh allowance (a key's allowance cannot be raised in place), the new code replaces
+    // the old, and `new` replaces its state, the stored builds included. The new switch says the patched build is live,
+    // so that its first flip installs the new vulnerable one on the chameleon.
+    const publicKey = PublicKey.from(flipKey.publicKey);
+    await send("redeploy-switch", await accountFor(switchId), switchId, [
+      actions.deleteKey(publicKey),
+      actions.addFunctionCallAccessKey(publicKey, switchId, ["flip"], nearToYocto(allowance)),
+      actions.deployContract(switchWasm),
+      actions.functionCall("new", initSwitch(BUILD_PATCHED), teraToGas("300"), 0n),
+    ], `replace the flip key ${flipKey.publicKey} with itself (may call flip on ${switchId} only, gas allowance ${allowance} NEAR), deploy the new swap_switch and call new(${chameleonId}, patched, ${MIN_INTERVAL_MS} ms, both new builds) in one transaction`);
+    deployment.flipKey = { publicKey: flipKey.publicKey, allowanceNear: allowance };
+    if (!done("first-flip")) {
+      const { hash } = await sendFlip(rpc, switchId, await readSecretKey(flipKeyFile));
+      deployment.transactions.push({ step: stepName("first-flip"), signer: switchId, receiver: switchId, hash, what: `flip with the flip key: the chameleon goes from the old build to the new vulnerable one` });
+      await save();
+      console.log(`${stepName("first-flip")}\n    ${explorerTxUrl(hash)}`);
+    }
+    await verifyChain([deployment.codeHashes.vulnerable]);
+    await save();
+    console.log(`done: ${deployment.transactions.length} transactions recorded in ${DEPLOYMENT_FILE}`);
+    return;
+  }
 
   // 1. The two accounts, each with its own full-access key.
   for (const [accountId, near] of [[chameleonId, chameleonNear], [switchId, switchNear]] as const) {
-    const publicKey = await ensureKey(accountId);
+    const publicKey = accountId === switchId ? switchKey : await ensureKey(accountId);
     await send(`create-${accountId.split(".")[0]}`, parentAccount, accountId, [actions.createAccount(), actions.transfer(nearToYocto(near)), actions.addFullAccessKey(PublicKey.from(publicKey))], `create ${accountId} with ${near} NEAR (full-access key ${publicKey})`);
   }
 
@@ -131,32 +207,13 @@ async function main(): Promise<void> {
   await send("deploy-chameleon", chameleon, chameleonId, [actions.deployContract(vulnerable), actions.functionCall("new", { switch: switchId, treasury: parent }, teraToGas("30"), 0n)], `deploy chameleon_vulnerable on ${chameleonId} and call new({switch, treasury: ${parent}}) in the same transaction`);
 
   // 3. The switch stores both builds for good and says the vulnerable one is live. Deploy and `new` in one transaction.
-  const switchAccount = await accountFor(switchId);
-  const init = Buffer.concat([borshString(chameleonId), Buffer.from([BUILD_VULNERABLE]), borshU64(MIN_INTERVAL_MS), borshBytes(vulnerable), borshBytes(patched)]);
-  await send("deploy-switch", switchAccount, switchId, [actions.deployContract(await wasm("swap_switch")), actions.functionCall("new", init, teraToGas("300"), 0n)], `deploy swap_switch on ${switchId} and call new(${chameleonId}, vulnerable, ${MIN_INTERVAL_MS} ms, both builds) in the same transaction`);
+  await send("deploy-switch", await accountFor(switchId), switchId, [actions.deployContract(switchWasm), actions.functionCall("new", initSwitch(BUILD_VULNERABLE), teraToGas("300"), 0n)], `deploy swap_switch on ${switchId} and call new(${chameleonId}, vulnerable, ${MIN_INTERVAL_MS} ms, both builds) in the same transaction`);
 
-  // 4. The auditor publishes the scanner's verdict for each build; rule ids come from the scanner's reports.
-  const auditor = await accountFor(auditorId);
-  for (const role of ["vulnerable", "patched"] as const) {
-    const reportFile = `chameleon-${role}.json`;
-    const reportBytes = await readFile(join(reports, reportFile));
-    const report = JSON.parse(reportBytes.toString("utf8")) as { findings: { rule_id: string }[] };
-    const ruleIds = [...new Set(report.findings.map((finding) => finding.rule_id))].sort();
-    const verdict = { code_hash: deployment.codeHashes[role], status: ruleIds.length === 0 ? "Safe" : "Unsafe", rule_ids: ruleIds, report_url: `${REPORT_BASE}/${reportFile}`, report_sha256: createHash("sha256").update(reportBytes).digest("hex") };
-    await send(`publish-${role}`, auditor, registryId, [actions.functionCall("publish_verdict", verdict, teraToGas("30"), nearToYocto(PUBLISH_DEPOSIT))], `publish ${verdict.status} ${verdict.rule_ids.join(",") || "(no rules)"} for the ${role} build's code hash ${verdict.code_hash}`);
-  }
-
-  // 5. The chain must hold exactly what was scanned, hashed and published, and the switch must say the same.
-  const onChain = await chainCodeHash(rpc, chameleonId, "optimistic");
-  if (onChain !== deployment.codeHashes.vulnerable && onChain !== deployment.codeHashes.patched) throw new Error(`${chameleonId} holds ${onChain}, neither of the builds that were deployed`);
-  for (const role of ["vulnerable", "patched"] as const) {
-    const verdict = (await viewJson(rpc, registryId, "get_verdict", { code_hash: deployment.codeHashes[role] }, "optimistic")) as { status?: string } | null;
-    if (verdict === null) throw new Error(`the registry has no verdict for the ${role} build`);
-    console.log(`registry verdict for the ${role} build: ${verdict.status}`);
-  }
+  // 4. The registry's verdicts, then the chain must hold exactly what was scanned and published.
+  await publishVerdicts();
+  await verifyChain([deployment.codeHashes.vulnerable, deployment.codeHashes.patched]);
 
   // 6. The flip key: made by the guard's scope-key script, `flip` on the switch only, no deposit, a gas allowance.
-  const flipKeyFile = keyPath(keysDir, "swap-flip-public");
   if (!done("scope-flip-key")) {
     const { stdout } = await promisify(execFile)(process.execPath, ["--disable-warning=ExperimentalWarning", join(import.meta.dirname, "..", "..", "..", "guard", "scripts", "scope-key.ts"), "--rpc", rpc, "--account", switchId, "--contract", switchId, "--methods", "flip", "--allowance", allowance, "--out", flipKeyFile], {
       env: { ...process.env, NEAR_OWNER_KEY: await readSecretKey(keyPath(keysDir, switchId)) },

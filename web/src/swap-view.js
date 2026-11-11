@@ -18,7 +18,7 @@ const STATUS = {
   live: () => 'Live on NEAR testnet. Every swap is a real transaction.',
   recorded: (state) => ({
     'rpc-down': `Recorded on ${when(state)}, RPC unreachable. Nothing below is live.`,
-    allowance: `Recorded on ${when(state)}. The demo key can no longer pay for swaps (its gas allowance is spent), so the button replays the recording. Nothing below is live.`,
+    'cannot-pay': `Recorded on ${when(state)}. The demo key can no longer pay for swaps, so the button replays the recording. Nothing below is live.`,
     unconfigured: `Recorded on ${when(state)}. No live contract is set up in this copy of the page. Nothing below is live.`,
   })[state.reason],
   empty: (state) => (state.reason === 'rpc-down'
@@ -119,8 +119,8 @@ const IDS = {
   button: 'swap-button', flips: 'swap-flips', tx: 'swap-tx',
 };
 
-/** Starts the section on the page. Never throws: whatever goes wrong, the section shows a state that says so. */
-export async function mountSwap(doc = document) {
+/** Starts the section on the page and returns its controller. Never throws: whatever goes wrong, the section shows a state that says so. */
+export async function mountSwap(doc = document, config = SWAP_CONFIG) {
   const els = Object.fromEntries(Object.entries(IDS).map(([name, id]) => [name, doc.getElementById(id)]));
   const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let recorded = null;
@@ -130,12 +130,13 @@ export async function mountSwap(doc = document) {
   } catch { /* no recording: the section says so */ }
 
   let swap;
-  const render = () => paint(doc, els, viewModel(swap.getState(), { now: Date.now(), explorerUrl: SWAP_CONFIG.explorerUrl }), { animate: !calm });
-  swap = createSwap({ config: SWAP_CONFIG, recorded, onChange: render });
+  const render = () => paint(doc, els, viewModel(swap.getState(), { now: Date.now(), explorerUrl: config.explorerUrl }), { animate: !calm });
+  swap = createSwap({ config, recorded, onChange: render });
   render();
   els.button.addEventListener('click', () => swap.flip());
   // The countdown on the button needs a repaint each second; nothing else changes between polls.
   setInterval(() => { if (swap.getState().waitUntil !== null) render(); }, 500);
-  doc.addEventListener('visibilitychange', () => { if (!doc.hidden) swap.refresh(); });
+  doc.addEventListener('visibilitychange', () => { if (!doc.hidden) swap.wake(); });
   swap.start();
+  return swap;
 }

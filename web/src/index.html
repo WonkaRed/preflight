@@ -29,10 +29,11 @@
       <button type="button" class="btn swap-btn" id="swap-button" disabled>Swap the code</button>
       <p class="swap-flips" id="swap-flips"></p>
     </div>
+    <p class="swap-tx" id="swap-tx" role="status"></p>
     <div class="swap-cards">
       <article class="card" id="swap-trust" data-tone="trust">
         <h2>Trusts the address</h2>
-        <p class="card-sub">An allowlist of account ids. Many agents and wallets decide this way.</p>
+        <p class="card-sub">A plain allowlist by account id. Not a model of any particular wallet or agent.</p>
         <p class="word" id="trust-word">No data</p>
         <p class="card-line" id="trust-note"></p>
         <p class="hashline"><span>Looked at</span><b>the account id, never the code</b></p>
@@ -46,7 +47,6 @@
       </article>
     </div>
 
-    <p class="swap-tx" id="swap-tx" role="status"></p>
     <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account we control, so this shows what each check keys on, not that a verdict is right.</p>
   </section>
 

@@ -18,19 +18,25 @@ Needs Node.js 22.22.2 or newer and network access. It installs the dependencies 
 | Account | Role |
 | --- | --- |
 | `chameleon.preflight-guard.testnet` | A small deposit vault. Runs build V or build P. It has no access keys (they were deleted after the first flip worked), so the only thing that can change its code is `switch`. |
-| `switch.preflight-guard.testnet` | Stores both builds for good and has `flip()`. |
+| `switch.preflight-guard.testnet` | Stores both builds and has `flip()`. |
 | `registry.preflight-guard.testnet` | The existing Preflight registry. It holds one verdict per code hash, published by `auditor.preflight-guard.testnet`. |
 
 | Build | Code hash (base58, as NEAR shows it) | SHA-256 (hex) | Scanner | Registry verdict |
 | --- | --- | --- | --- | --- |
-| V, vulnerable | `HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa` | `f115a60b138caa907e76985a45109980a0afadb2f00161ea15cd5f977fa6dfcd` | PF001 | Unsafe, `["PF001"]` |
-| P, patched | `BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj` | `a33f1873cdf26c4f7f10572ba2b6d5f69f0a1769b6c696f6371e1fd6d1a33a5e` | no findings | Safe, `[]` |
+| V, vulnerable | `CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj` | `a90bdd6b7620881bdf98504748ff26db9e03dcd20592a975eb91fe3c84044942` | PF001 | Unsafe, `["PF001"]` |
+| P, patched | `Gg8KdwiNHoP9tpzGismdHrpUiqmfNNcib3rp9iEKT4Hh` | `e8e53bd3c02aa77779d4f078f38457562b93af4355e6262dd54c7ff7b1be9cc4` | no findings | Safe, `[]` |
 
 The two builds are `chameleon/vulnerable/src/lib.rs` and `chameleon/patched/src/lib.rs`. They are the same vault and differ in one line of code: P has `#[private]` on `on_deposit`, V has a comment there. A test (`the_two_chameleon_sources_differ_only_in_the_callback_guard`) keeps it that way, so the two builds read the same state and the swap needs no migration.
 
+These are the second pair of builds. The first pair (V `HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa`, P `BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj`) let a stranger drain the chameleon's own storage money (below), which made later flips fail; their registry verdicts are still in the registry, and no account runs them any more. The report files in `reports/` are the second pair's, so a report hash recorded for the first pair no longer matches the file at its URL.
+
 ### The vulnerability is real
 
-`deposit()` sends a 1% fee to the treasury and schedules `on_deposit` to credit the rest once the transfer has settled. In V, `on_deposit` is a public method, so any account can call it directly and credit itself any balance, then `withdraw` NEAR that other depositors put in. This is PF001 (a callback not marked `#[private]`). The scanner finds it from the source, and the sandbox test `the_vulnerable_chameleon_lets_an_outsider_credit_itself_and_drain_a_depositor` runs the attack against the real wasm. The same test sequence against P fails with `Method on_deposit is private` (`the_patched_chameleon_rejects_the_forged_callback_and_still_settles_a_real_deposit`). The chameleon on testnet holds no one's money; the attack is demonstrated in the sandbox only.
+`deposit()` sends a 1% fee to the treasury and schedules `on_deposit` to credit the rest once the transfer has settled. In V, `on_deposit` is a public method, so any account can call it directly and credit itself any balance, then `withdraw` NEAR that other depositors put in. This is PF001 (a callback not marked `#[private]`). The scanner finds it from the source, and the sandbox test `the_vulnerable_chameleon_lets_an_outsider_credit_itself_and_drain_a_depositor` runs the attack against the real wasm. The same test sequence against P fails with `Method on_deposit is private` (`the_patched_chameleon_rejects_the_forged_callback_and_still_settles_a_real_deposit`). The chameleon on testnet holds no depositor's money; the attack is demonstrated in the sandbox, and on testnet against its spare balance (next).
+
+### What a forged credit cannot reach
+
+A forged credit may take what depositors put in. It must not take what keeps the contract alive: the chameleon pays for its own code and for the extra bytes of each upgrade out of its balance. The first pair of builds let the attacker withdraw that too: deposit 1 yoctoNEAR, forge a credit, withdraw the spare, and every later flip failed with `the chameleon's upgrade failed; it still runs the previous build`. Both builds now send every transfer out (`withdraw` and the refund of a failed deposit, which the same callback can reach) through one function that refuses to leave the account with less than its storage cost plus a reserve of 0.5 NEAR, computed from `env::storage_usage()` and `env::storage_byte_cost()`. A deposit must also cover the storage of the balance entry it creates, which is deducted from what it credits (`deposit` fails with `the deposit must cover the fee and the storage of your balance entry`), so a deposit never costs the contract anything. The attack is a sandbox test (`a_forged_credit_cannot_spend_the_contracts_own_money_so_the_flip_keeps_working`: forge a credit, withdraw all that is allowed, flip both ways) and it was run on testnet against the live V from a throwaway account: the forged credit was accepted (a genuine PF001), `withdraw` of 1,000 NEAR was refused with `that would spend the storage money and the reserve the contract keeps`, `withdraw` of everything allowed (0.5723 NEAR of spare above the reserve) succeeded and left the chameleon at exactly its storage cost plus 0.5 NEAR, and the next four flips with the public key all went through. So the chameleon's spare balance above 0.5 NEAR is bait by design (that is the vulnerability) and the 0.5 NEAR is not.
 
 ### The upgrade path
 
@@ -38,26 +44,49 @@ Both builds export `upgrade(code)`. It takes the new wasm as a Borsh `Vec<u8>` (
 
 `flip()` on the switch:
 
-1. refuses before `next_flip_ms` (`too soon: the next flip is allowed from <ms>`; the minimum interval is 10 s) and with less than 100 Tgas attached;
+1. refuses before `next_flip_ms` (`too soon: the next flip is allowed from <ms>`; the minimum interval is 20 s) and with less than 100 Tgas attached;
 2. sends the build that is not live to `chameleon.upgrade`;
 3. in its callback `on_flipped`, which only the switch can call, records the new live build, counts the flip and logs a NEP-297 `swap` / `flipped` event. If the upgrade failed it records nothing.
 
-The two builds are stored when the switch is initialised and nothing can write or replace them afterwards: the switch has no owner method.
+The two builds are stored when the switch is initialised, and no method the page can reach writes or replaces them. Only the switch account's own full-access key (the deployer's) can initialise it again: `new` is `#[private]` and `#[init(ignore_state)]`, so a deployment can be replaced in place by one transaction that deploys the new code and calls `new` (how the second pair of builds went live; `deploy.ts --generation 2`). The flip key cannot call it.
 
 ## The flip key
 
-The deployer's testnet keys directory holds `swap-flip-public.key` (mode 0600, never in the repository): the private key whose public half is `ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL`. It is a function-call key on `switch.preflight-guard.testnet`, restricted to receiver `switch.preflight-guard.testnet`, method `flip`, no deposit, with a gas allowance of 3 NEAR. It is meant to be published on the web page so a visitor's browser can sign `flip` with no wallet. Checked live: with that key, `on_flipped` is refused (`AccessKeyMethodNameMismatchActionError`), `chameleon.upgrade` is refused (`AccessKeyReceiverMismatchActionError`) and any deposit is refused (`AccessKeyDepositWithFunctionCallActionError`).
+The deployer's testnet keys directory holds `swap-flip-public.key` (mode 0600, never in the repository): the private key whose public half is `ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL`. It is a function-call key on `switch.preflight-guard.testnet`, restricted to receiver `switch.preflight-guard.testnet`, method `flip`, no deposit, with a gas allowance of 5 NEAR (renewed by the watchdog, below). It is meant to be published on the web page so a visitor's browser can sign `flip` with no wallet. Checked live: with that key, `on_flipped` is refused (`AccessKeyMethodNameMismatchActionError`), `chameleon.upgrade` is refused (`AccessKeyReceiverMismatchActionError`) and any deposit is refused (`AccessKeyDepositWithFunctionCallActionError`).
 
-What a visitor can do with it is bounded three ways: the switch accepts one flip per 10 s, the key can only call `flip`, and its allowance runs out (below).
+What a visitor can do with it is bounded three ways: the switch accepts one flip per 20 s, the key can only call `flip`, and its allowance runs out (below). Re-checked after the second deployment: `new` and `on_flipped` on the switch, `upgrade` on the chameleon, and a flip with any deposit are all refused for that key.
 
 To sign a flip yourself: account id `switch.preflight-guard.testnet`, receiver `switch.preflight-guard.testnet`, method `flip`, args `{}`, gas 150 Tgas, deposit 0. `scripts/lib.ts` (`sendFlip`) does exactly that with near-api-js, and `npm run flip -- --key <file>` runs it.
 
-### What a flip costs, and how to top it up
+### What it costs, and who pays
 
-A flip burns about 27.5 Tgas (measured in the sandbox, both directions) and 0.0027 NEAR on testnet (measured live: the allowance and the switch's balance each fell by 0.0027 NEAR per flip). The gas attached beyond that is refunded.
+The flip key's private half is public, so anyone can spend its allowance and the switch's balance. What that costs, measured (the sandbox's burnt gas, and on testnet the fall of both the allowance and the switch's balance, which move together):
 
-- Allowance: 3 NEAR, about 1,100 flips. A function-call key's allowance cannot be raised in place. To renew it, add a fresh key with `guard/scripts/scope-key.ts` (it needs the switch's full-access key in `NEAR_OWNER_KEY` and prints nothing secret) and publish the new key, or delete the old key and add it back.
-- Balance: `switch` holds 5.97 NEAR, of which 4.35 NEAR is locked by its storage (435,406 bytes: its own code and both builds). The spare 1.6 NEAR covers about 600 flips. To top up, send NEAR to `switch.preflight-guard.testnet` from any testnet account.
+| Call | Burnt gas | Cost on testnet |
+| --- | --- | --- |
+| a flip that goes through (either direction) | 27.6 Tgas | about 0.0027 NEAR |
+| a flip refused as too soon (a transaction that fails inside the switch) | 1.5 Tgas | 0.000146 NEAR, measured over three |
+
+The gas attached beyond what is burnt is refunded, to the balance and to the allowance. With the 20 s interval at most 180 flips an hour go through (about 0.5 NEAR an hour); refused flips are cheaper each (about 6,800 per NEAR) but come as fast as the RPC lets a script send them, so they are the real drain: 5 NEAR of allowance is about 34,000 refused flips. The numbers now: the switch holds 13.43 NEAR, of which 4.37 NEAR is locked by its storage (437,098 bytes: its own code and both builds), so 9.06 NEAR is spare; the flip key's allowance is 5 NEAR (4.975 after the flips since the second deployment). It is not the 30 NEAR that was aimed for: the testnet faucet (near-faucet.io, up to 2 NEAR a request) answered only some requests and none at all for a run of ten, so 9 NEAR spare is what the project's own testnet accounts and the faucet gave. That is about 18 hours of the worst case (a flip every 20 s, all accepted); the watchdog (next) is what keeps it going.
+
+A function-call key's allowance cannot be raised in place; the watchdog replaces the key by itself (same public key, fresh allowance) in one transaction, so the page's key never changes.
+
+### The watchdog
+
+```sh
+PREFLIGHT_TESTNET_KEYS=~/.claude/secrets/survival-testnet make -C demo/swap watchdog
+# or, without make: cd demo/swap && PREFLIGHT_TESTNET_KEYS=<dir> npm run --silent watchdog
+```
+
+It prints one line (`swap-watchdog <time> OK|FAIL | switch_spare=… chameleon_spare=… flip_allowance=… | live=… flips=… | repaired: … | problems: …`) and exits 0 when all three are above their floors, 1 when any is not and could not be repaired (or the chain could not be read), 2 for a usage error. Spare is balance minus what the account's storage costs. Floors and repairs, when `PREFLIGHT_TESTNET_KEYS` holds the key files:
+
+| Reading | Floor | Repair |
+| --- | --- | --- |
+| switch spare | 5 NEAR | `preflight-guard.testnet` (`<dir>/preflight-guard.testnet.key`) sends NEAR up to 10 spare, as far as its own spare above 0.2 NEAR allows |
+| chameleon spare | 0.3 NEAR | the same, up to 1 NEAR; the contract itself never lets it fall under 0.5 NEAR, so this floor trips only if something else is wrong |
+| flip key allowance | 1 NEAR | `switch.preflight-guard.testnet` (`<dir>/switch.preflight-guard.testnet.key`) deletes and re-adds the same public key with 5 NEAR, in one transaction |
+
+Without `PREFLIGHT_TESTNET_KEYS` it only reads and reports. The funder is the parent account, which holds 1.09 NEAR now: past that, the line says FAIL and someone must send testnet NEAR to `preflight-guard.testnet` (the faucet, when it is up).
 
 ## What a page needs
 
@@ -69,12 +98,12 @@ Reads, JSON-RPC `query` with `request_type: "call_function"`, `finality: "final"
 {
   "chameleon": "chameleon.preflight-guard.testnet",
   "live": "vulnerable",
-  "vulnerable": { "code_hash": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa", "code_hash_hex": "f115a60b138caa907e76985a45109980a0afadb2f00161ea15cd5f977fa6dfcd", "size_bytes": 142476 },
-  "patched": { "code_hash": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj", "code_hash_hex": "a33f1873cdf26c4f7f10572ba2b6d5f69f0a1769b6c696f6371e1fd6d1a33a5e", "size_bytes": 142797 },
-  "flips": 8,
-  "last_flip_ms": 1794421224807,
-  "min_interval_ms": 10000,
-  "next_flip_ms": 1794421234807
+  "vulnerable": { "code_hash": "CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj", "code_hash_hex": "a90bdd6b7620881bdf98504748ff26db9e03dcd20592a975eb91fe3c84044942", "size_bytes": 143321 },
+  "patched": { "code_hash": "Gg8KdwiNHoP9tpzGismdHrpUiqmfNNcib3rp9iEKT4Hh", "code_hash_hex": "e8e53bd3c02aa77779d4f078f38457562b93af4355e6262dd54c7ff7b1be9cc4", "size_bytes": 143650 },
+  "flips": 9,
+  "last_flip_ms": 1794425509139,
+  "min_interval_ms": 20000,
+  "next_flip_ms": 1794425529139
 }
 ```
 
@@ -83,11 +112,11 @@ Reads, JSON-RPC `query` with `request_type: "call_function"`, `finality: "final"
 
 ```json
 {
-  "code_hash": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
+  "code_hash": "CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj",
   "status": "Unsafe",
   "rule_ids": ["PF001"],
   "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-vulnerable.json",
-  "report_sha256": "d4aa7541abcff2aaaf2f949cf19c11670c67ee1e22bf3d2900b66257b22d9adb",
+  "report_sha256": "f6810d20974148854407ab37910f7c70b6e3935304672d7cdb4107b1297b92a5",
   "auditor": "auditor.preflight-guard.testnet",
   "published_at_ms": "1794421027132"
 }
@@ -103,7 +132,7 @@ Write: the `flip` call above. A flip refused by the interval fails with `Smart c
 
 ## Live record
 
-Setup (explorer: `https://testnet.near.rocks/tx/<hash>`):
+Explorer: `https://testnet.near.rocks/tx/<hash>`. First deployment (the first pair of builds, retired):
 
 | Step | Transaction |
 | --- | --- |
@@ -116,14 +145,27 @@ Setup (explorer: `https://testnet.near.rocks/tx/<hash>`):
 | add the flip key | `2z1byPikKVYfgSXCWAF67cMFfFz854TvkaHd86hfzwnV` |
 | delete the chameleon's key | `7eQw3s93kY29Taz65tsW2SHRAScyhWLAqKF5Jzpr8WoN` |
 
-The four recorded flips, signed with the flip key and nothing else:
+Second deployment (the builds in the table above; `deployment.json` records every step as `<step>-g2`):
+
+| Step | Transaction |
+| --- | --- |
+| publish verdict for V (Unsafe, PF001) | `AS4KrxGn1xE3SFqfLg1bhMFHAiXR11Ju3P4mvKBKDGa8` |
+| publish verdict for P (Safe) | `FXLCGhF4wb4P2csGj9srz6EDWRa9YhwQC4fJXhKFkS2N` |
+| give the chameleon 0.8 NEAR | `229Bs1wZPh4GM1biS5bjcb7EBvqhJhhYfkgoi2r7agry` |
+| give the switch 7.5 NEAR | `C3hb5soJKY5jEbLj15AsAeu8AT3GvoBvZtfE3pviWe2x` |
+| replace the flip key (same public key, 5 NEAR allowance), deploy the new switch, `new` | `2tRmGX3K9BGNyVUFE3UNRqvySrwde1aeogJ8xowb97Ve` |
+| first flip: the old build to the new V | `3j4qVztFYaMMBBtP83EiWsGantxfBCnBDNCmbWFntDVN` |
+
+The attack on the live V (a throwaway account, deleted afterwards): deposit 0.01 NEAR `F4CkimJwNJtrbChYDujbfDJTik7KLYgUUjnp3YHk77vX`, forged `on_deposit` of 1,000 NEAR `5eXiEVCiT7VpyXAiafSgUpWZW9VhG1rFZdrJtFjGAY6b`, `withdraw` of everything allowed `3eRecbNN77TokPKPLNLw8wX8VrPxQm2BGs79Qm9F632H` (the withdrawal of 1,000 NEAR was refused and left no transaction on chain).
+
+The four recorded flips, signed with the flip key and nothing else, after that attack:
 
 | # | Change | Guard | Transaction |
 | --- | --- | --- | --- |
-| 1 | P to V | ALLOW to BLOCK | `6LcXC8ehGsaukGN9JuKe7StYTT2Us51jn5LhYwceY4bp` |
-| 2 | V to P | BLOCK to ALLOW | `72WhNT2pHp1LjYLgfEZkQz4jwpXgrEmL2pzGnedmVB2a` |
-| 3 | P to V | ALLOW to BLOCK | `x1okFKCXPLi6kTG8mavhKhpggZqbQ8GnezppenkMCu1` |
-| 4 | V to P | BLOCK to ALLOW | `Bs7UpkMmycW2U69SCfLNUrU84DEmazZkU4s46v7wFaXK` |
+| 1 | V to P | BLOCK to ALLOW | `5efUodURtiHeAvfxJQTixSJGbUP7Y3GzBsRaeFBoYxd9` |
+| 2 | P to V | ALLOW to BLOCK | `CtjfoUnJuRzRkktFFXrXyMyypVTVM3eFni4n5Bvnofzi` |
+| 3 | V to P | BLOCK to ALLOW | `2j6fzVUDpMd81khAoAjaHdzpFYfCut786tJJyCjkJ7gZ` |
+| 4 | P to V | ALLOW to BLOCK | `ELXAqXc3UWwxt23Nr6aep8i8Qgwih3C7tfjDLk5H3z3Y` |
 
 More flips were sent before and after (the switch's counter says how many); the chameleon was left on V.
 
@@ -135,6 +177,7 @@ The wasm files in `wasm/` are the ones that were scanned, hashed and deployed, a
 make build        # wasm/*.wasm and wasm/SHA256SUMS (pinned toolchain from rust-toolchain.toml)
 make reports      # the scanner's JSON report for each build, in reports/
 make test         # the sandbox tests: needs the pinned Rust toolchain, builds a local NEAR node
+make watchdog     # one status line for the money, and the repairs (see above)
 npm ci && npm run build   # typecheck the scripts
 ```
 
@@ -148,11 +191,13 @@ PREFLIGHT_TESTNET_KEYS=<dir with <account>.key files> \
 node --disable-warning=ExperimentalWarning scripts/record.ts --key <dir>/swap-flip-public.key
 ```
 
+A later deployment of new builds behind the same accounts (publish their verdicts, top both accounts up, replace the switch in place, one flip) is the same command with `--generation 2 [--switch-topup 8] [--allowance 5] [--chameleon-topup 0.8]`.
+
 Every step is recorded in `deployment.json` as it happens, and a rerun skips the recorded steps. Keys are written to `<dir>` with mode 0600 and never printed.
 
 ## Limits
 
 - `live` in `status()` is a record, not a read: the switch cannot read the chameleon's code hash on chain. It is set only after the chameleon's upgrade succeeded, and a page that wants the truth reads `view_account`.
-- The 10 s interval starts when `flip` is accepted, before the upgrade lands. If an upgrade ever took longer than that, a second flip could read a stale `live` and send the same build again: harmless, since the build is the one the first flip is already installing.
+- The 20 s interval starts when `flip` is accepted, before the upgrade lands. If an upgrade ever took longer than that, a second flip could read a stale `live` and send the same build again: harmless, since the build is the one the first flip is already installing.
 - The sandbox tests build the contracts with the repository's wasm flags, not `make build`'s path remapping; the code is the same, the bytes (and hashes) differ.
 - The chameleon's treasury is `preflight-guard.testnet`; the vault is a demonstration and has no way to recover funds sent to it other than `withdraw`.

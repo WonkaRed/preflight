@@ -6,12 +6,12 @@
   "chameleon": "chameleon.preflight-guard.testnet",
   "switch": "switch.preflight-guard.testnet",
   "codeHashes": {
-    "vulnerable": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
-    "patched": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj"
+    "vulnerable": "CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj",
+    "patched": "Gg8KdwiNHoP9tpzGismdHrpUiqmfNNcib3rp9iEKT4Hh"
   },
   "flipKey": {
     "publicKey": "ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL",
-    "allowanceNear": "3"
+    "allowanceNear": "5"
   },
   "transactions": [
     {
@@ -69,6 +69,54 @@
       "receiver": "chameleon.preflight-guard.testnet",
       "hash": "7eQw3s93kY29Taz65tsW2SHRAScyhWLAqKF5Jzpr8WoN",
       "what": "delete the chameleon's access key(s) ed25519:ASq44WavL6MD6CTpoU3BbmdKfddCL8GTft6u2X4hCgmg: only the switch can change its code"
+    },
+    {
+      "step": "publish-vulnerable-g2",
+      "signer": "auditor.preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "AS4KrxGn1xE3SFqfLg1bhMFHAiXR11Ju3P4mvKBKDGa8",
+      "what": "publish Unsafe PF001 for the vulnerable build's code hash CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj"
+    },
+    {
+      "step": "publish-patched-g2",
+      "signer": "auditor.preflight-guard.testnet",
+      "receiver": "registry.preflight-guard.testnet",
+      "hash": "FXLCGhF4wb4P2csGj9srz6EDWRa9YhwQC4fJXhKFkS2N",
+      "what": "publish Safe (no rules) for the patched build's code hash Gg8KdwiNHoP9tpzGismdHrpUiqmfNNcib3rp9iEKT4Hh"
+    },
+    {
+      "step": "topup-chameleon-g2",
+      "signer": "preflight-guard.testnet",
+      "receiver": "chameleon.preflight-guard.testnet",
+      "hash": "229Bs1wZPh4GM1biS5bjcb7EBvqhJhhYfkgoi2r7agry",
+      "what": "give chameleon.preflight-guard.testnet 0.8 NEAR for the new builds' storage and gas"
+    },
+    {
+      "step": "topup-switch-g2",
+      "signer": "preflight-guard.testnet",
+      "receiver": "switch.preflight-guard.testnet",
+      "hash": "C3hb5soJKY5jEbLj15AsAeu8AT3GvoBvZtfE3pviWe2x",
+      "what": "give switch.preflight-guard.testnet 7.5 NEAR to pay for flips"
+    },
+    {
+      "step": "redeploy-switch-g2",
+      "signer": "switch.preflight-guard.testnet",
+      "receiver": "switch.preflight-guard.testnet",
+      "hash": "2tRmGX3K9BGNyVUFE3UNRqvySrwde1aeogJ8xowb97Ve",
+      "what": "replace the flip key ed25519:5avhf3t11cgnAjjSrgJfAgjKjSTheAhdwhneXns19gKL with itself (may call flip on switch.preflight-guard.testnet only, gas allowance 5 NEAR), deploy the new swap_switch and call new(chameleon.preflight-guard.testnet, patched, 20000 ms, both new builds) in one transaction"
+    },
+    {
+      "step": "first-flip-g2",
+      "signer": "switch.preflight-guard.testnet",
+      "receiver": "switch.preflight-guard.testnet",
+      "hash": "3j4qVztFYaMMBBtP83EiWsGantxfBCnBDNCmbWFntDVN",
+      "what": "flip with the flip key: the chameleon goes from the old build to the new vulnerable one"
+    }
+  ],
+  "retired": [
+    {
+      "vulnerable": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
+      "patched": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj"
     }
   ]
 }

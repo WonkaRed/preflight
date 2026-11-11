@@ -35,6 +35,7 @@ export function fakeChain() {
     lag: 0, lagAfterSend: 0, target: null, // account reads that still show the old build after a swap (the deploy receipt lands later)
     sendErrors: [],  // JSON-RPC errors send_tx answers with, one per call, before it succeeds
     sendResult: null, // overrides a successful send_tx result
+    upgradeFails: false, // the flip succeeds but the chameleon's upgrade does not: no new code, no count, no countdown
     down: false, accessKeyError: null, statusOverride: undefined, codeOverride: undefined,
     calls: [],
   };
@@ -50,6 +51,7 @@ export function fakeChain() {
       if (method === 'send_tx') {
         const error = chain.sendErrors.shift();
         if (error) return { error };
+        if (chain.upgradeFails) return { result: chain.sendResult }; // the switch's callback leaves everything as it was
         chain.target = chain.build === 'vulnerable' ? 'patched' : 'vulnerable';
         chain.lag = chain.lagAfterSend;
         if (chain.lag === 0) chain.build = chain.target;

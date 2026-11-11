@@ -85,6 +85,9 @@ fn sha256(bytes: &[u8]) -> near_workspaces::CryptoHash {
 /// to wait out.
 const INTERVAL_MS: u64 = 3_000;
 const BUILD_VULNERABLE: u8 = 0;
+/// yoctoNEAR a byte of storage costs, and the reserve the chameleon keeps on top of its storage cost.
+const STORAGE_BYTE_COST: u128 = 10_000_000_000_000_000_000;
+const RESERVE: u128 = 500_000_000_000_000_000_000_000;
 
 struct Scene {
     chameleon: Contract,
@@ -162,6 +165,18 @@ impl Scene {
         Ok(())
     }
 
+    /// A first deposit small enough to be nothing but the storage of the caller's balance entry, so the vault has an entry for them to credit.
+    async fn open_balance_entry(&self, who: &Account) -> Result<()> {
+        who.call(self.chameleon.id(), "deposit").deposit(NearToken::from_millinear(10)).max_gas().transact().await?.into_result()?;
+        Ok(())
+    }
+
+    /// What the chameleon's balance holds beyond what its storage costs.
+    async fn spare(&self) -> Result<u128> {
+        let account = self.chameleon.view_account().await?;
+        Ok(account.balance.as_yoctonear().saturating_sub(u128::from(account.storage_usage) * STORAGE_BYTE_COST))
+    }
+
     async fn balance_of(&self, who: &Account) -> Result<NearToken> {
         let yocto: String = self.chameleon.view("balance_of").args_json(json!({ "account_id": who.id() })).await?.json()?;
         Ok(NearToken::from_yoctonear(yocto.parse()?))
@@ -173,16 +188,20 @@ impl Scene {
         Ok(self
             .mallory
             .call(self.chameleon.id(), "on_deposit")
-            .args_json(json!({ "depositor": self.mallory.id(), "gross": credit, "net": credit }))
+            .args_json(json!({ "depositor": self.mallory.id(), "refund": credit, "net": credit }))
             .max_gas()
             .transact()
             .await?)
     }
 
     async fn withdraw(&self, who: &Account, near: u128) -> Result<near_workspaces::result::ExecutionFinalResult> {
+        self.withdraw_yocto(who, NearToken::from_near(near).as_yoctonear()).await
+    }
+
+    async fn withdraw_yocto(&self, who: &Account, yocto: u128) -> Result<near_workspaces::result::ExecutionFinalResult> {
         Ok(who
             .call(self.chameleon.id(), "withdraw")
-            .args_json(json!({ "amount": NearToken::from_near(near).as_yoctonear().to_string() }))
+            .args_json(json!({ "amount": yocto.to_string() }))
             .deposit(NearToken::from_yoctonear(1))
             .max_gas()
             .transact()
@@ -203,11 +222,12 @@ async fn the_vulnerable_chameleon_lets_an_outsider_credit_itself_and_drain_a_dep
     let worker = sandbox().await?;
     let scene = Scene::new(&worker).await?;
     scene.deposit(&scene.victim, 10).await?;
-    // Mallory pays the 1 yocto minimum, so the vault has a balance entry for her; then she names her own credit.
-    scene.mallory.call(scene.chameleon.id(), "deposit").deposit(NearToken::from_yoctonear(1)).max_gas().transact().await?.into_result()?;
+    // Mallory pays for a balance entry, so the vault has one for her; then she names her own credit.
+    scene.open_balance_entry(&scene.mallory).await?;
+    let paid = scene.balance_of(&scene.mallory).await?;
 
     scene.forge_credit(10).await?.into_result()?;
-    assert_eq!(scene.balance_of(&scene.mallory).await?, NearToken::from_near(10).saturating_add(NearToken::from_yoctonear(1)), "a credit she never paid for");
+    assert_eq!(scene.balance_of(&scene.mallory).await?, paid.saturating_add(NearToken::from_near(10)), "a credit she never paid for");
 
     let (mallory_before, vault_before) = (scene.mallory.view_account().await?.balance, scene.chameleon.view_account().await?.balance);
     scene.withdraw(&scene.mallory, 10).await?.into_result()?;
@@ -226,20 +246,83 @@ async fn the_patched_chameleon_rejects_the_forged_callback_and_still_settles_a_r
     assert_eq!(scene.status().await?["live"], "patched");
     let treasury_before = scene.treasury.view_account().await?.balance;
 
+    let storage_before = scene.chameleon.view_account().await?.storage_usage;
     scene.deposit(&scene.victim, 10).await?;
-    scene.mallory.call(scene.chameleon.id(), "deposit").deposit(NearToken::from_yoctonear(1)).max_gas().transact().await?.into_result()?;
+    let entry = NearToken::from_yoctonear(u128::from(scene.chameleon.view_account().await?.storage_usage - storage_before) * STORAGE_BYTE_COST);
+    scene.open_balance_entry(&scene.mallory).await?;
+    let paid = scene.balance_of(&scene.mallory).await?;
     let failure = failure_of(scene.forge_credit(10).await?);
     assert!(failure.contains("Method on_deposit is private"), "unexpected failure: {failure}");
-    assert_eq!(scene.balance_of(&scene.mallory).await?, NearToken::from_yoctonear(1), "the rejected call changed nothing");
+    assert_eq!(scene.balance_of(&scene.mallory).await?, paid, "the rejected call changed nothing");
     let failure = failure_of(scene.withdraw(&scene.mallory, 10).await?);
     assert!(failure.contains("insufficient balance"), "unexpected failure: {failure}");
 
     // The contract's own callback still works: 99% credited, 1% to the treasury.
-    assert_eq!(scene.balance_of(&scene.victim).await?, NearToken::from_millinear(9_900));
+    assert_eq!(scene.balance_of(&scene.victim).await?, NearToken::from_millinear(9_900).saturating_sub(entry), "99% credited, less the storage of the victim's entry");
     let fee = scene.treasury.view_account().await?.balance.as_yoctonear() - treasury_before.as_yoctonear();
-    assert_eq!(fee, NearToken::from_millinear(100).as_yoctonear(), "the 1% fee reached the treasury");
+    assert_eq!(fee, NearToken::from_millinear(100).as_yoctonear() + NearToken::from_micronear(100).as_yoctonear(), "the 1% fees on 10 NEAR and on 0.01 NEAR reached the treasury");
     scene.withdraw(&scene.victim, 9).await?.into_result()?;
-    assert_eq!(scene.balance_of(&scene.victim).await?, NearToken::from_millinear(900));
+    assert_eq!(scene.balance_of(&scene.victim).await?, NearToken::from_millinear(900).saturating_sub(entry));
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_forged_credit_cannot_spend_the_contracts_own_money_so_the_flip_keeps_working() -> Result<()> {
+    let worker = sandbox().await?;
+    let scene = Scene::new(&worker).await?;
+    let (vulnerable, patched) = (sha256(wasm("chameleon-vulnerable")), sha256(wasm("chameleon-patched")));
+    scene.deposit(&scene.victim, 10).await?;
+    scene.open_balance_entry(&scene.mallory).await?;
+
+    // The attack that broke the first deployment: credit herself far more than the vault holds, then withdraw all
+    // she can. The vault pays out down to its storage cost plus the reserve, and not one yocto further.
+    let credit = NearToken::from_near(1_000);
+    scene.mallory.call(scene.chameleon.id(), "on_deposit").args_json(json!({ "depositor": scene.mallory.id(), "refund": credit.as_yoctonear().to_string(), "net": credit.as_yoctonear().to_string() })).max_gas().transact().await?.into_result()?;
+    let all_she_can = scene.spare().await?.saturating_sub(RESERVE);
+    // The 1 yocto that `withdraw` needs attached is the contract's money too, so the bound is one yocto above.
+    scene.withdraw_yocto(&scene.mallory, all_she_can + 2).await?.into_result().expect_err("more than the vault may pay out must be refused");
+    let mallory_before = scene.mallory.view_account().await?.balance.as_yoctonear();
+    scene.withdraw_yocto(&scene.mallory, all_she_can).await?.into_result()?;
+    let gained = scene.mallory.view_account().await?.balance.as_yoctonear().saturating_sub(mallory_before);
+    assert!(gained > all_she_can - NearToken::from_millinear(10).as_yoctonear(), "she did walk away with what depositors put in: {gained}");
+    let spare = scene.spare().await?;
+    assert!(spare >= RESERVE, "the vault kept its reserve: spare {spare}");
+    let failure = failure_of(scene.withdraw(&scene.mallory, 1).await?);
+    assert!(failure.contains("storage money and the reserve"), "unexpected failure: {failure}");
+
+    // Both flips still pay for the upgrade.
+    scene.flip().await?.into_result()?;
+    assert_eq!(scene.code_hash().await?, patched);
+    wait_out_the_interval().await;
+    scene.flip().await?.into_result()?;
+    assert_eq!(scene.code_hash().await?, vulnerable);
+    Ok(())
+}
+
+#[tokio::test]
+async fn a_deposit_pays_for_the_storage_of_the_balance_entry_it_creates_and_the_contract_never_does() -> Result<()> {
+    for patched in [false, true] {
+        let worker = sandbox().await?;
+        let scene = Scene::new(&worker).await?;
+        if patched {
+            scene.flip().await?.into_result()?;
+        }
+        let failure = failure_of(scene.mallory.call(scene.chameleon.id(), "deposit").deposit(NearToken::from_yoctonear(1)).max_gas().transact().await?);
+        assert!(failure.contains("must cover the fee and the storage"), "unexpected failure: {failure}");
+
+        let (spare, storage) = (scene.spare().await?, scene.chameleon.view_account().await?.storage_usage);
+        scene.deposit(&scene.victim, 10).await?;
+        let entry = u128::from(scene.chameleon.view_account().await?.storage_usage - storage) * STORAGE_BYTE_COST;
+        assert!(entry > 0, "the first deposit creates a balance entry");
+        assert_eq!(scene.balance_of(&scene.victim).await?.as_yoctonear(), NearToken::from_millinear(9_900).as_yoctonear() - entry);
+        // Solvency: what the contract holds beyond its storage grew by at least what it now owes the depositor.
+        assert!(scene.spare().await? >= spare + scene.balance_of(&scene.victim).await?.as_yoctonear(), "the deposit paid for its own storage");
+
+        // The entry exists now: the second deposit is credited whole, less the fee.
+        let credited = scene.balance_of(&scene.victim).await?.as_yoctonear();
+        scene.deposit(&scene.victim, 1).await?;
+        assert_eq!(scene.balance_of(&scene.victim).await?.as_yoctonear(), credited + NearToken::from_millinear(990).as_yoctonear());
+    }
     Ok(())
 }
 
@@ -290,7 +373,7 @@ async fn flip_swaps_the_code_back_and_forth_and_keeps_the_state() -> Result<()> 
     assert_eq!(scene.status().await?["flips"], 2);
     assert_eq!(scene.balance_of(&scene.victim).await?, balance);
     // Back on the vulnerable build the forged callback works again.
-    scene.mallory.call(scene.chameleon.id(), "deposit").deposit(NearToken::from_yoctonear(1)).max_gas().transact().await?.into_result()?;
+    scene.open_balance_entry(&scene.mallory).await?;
     scene.forge_credit(1).await?.into_result()?;
     Ok(())
 }
@@ -302,7 +385,9 @@ async fn flip_enforces_the_interval_and_a_minimum_of_gas() -> Result<()> {
     scene.flip().await?.into_result()?;
     let status = scene.status().await?;
 
-    let failure = failure_of(scene.flip().await?);
+    let refused = scene.flip().await?;
+    eprintln!("flip gas burnt, refused as too soon: {}", refused.total_gas_burnt);
+    let failure = failure_of(refused);
     assert!(failure.contains("too soon"), "unexpected failure: {failure}");
     assert_eq!(scene.status().await?, status, "a refused flip changes nothing");
     wait_out_the_interval().await;
@@ -348,6 +433,28 @@ async fn a_flip_whose_upgrade_fails_is_not_recorded() -> Result<()> {
     assert!(outcome.logs().iter().any(|log| log.contains("upgrade failed")), "logs: {:?}", outcome.logs());
     let status = scene.status().await?;
     assert_eq!((status["live"].as_str(), status["flips"].as_u64()), (Some("vulnerable"), Some(0)));
+    Ok(())
+}
+
+#[tokio::test]
+async fn only_the_switch_account_itself_can_initialise_the_switch_again_and_that_replaces_its_state() -> Result<()> {
+    let worker = sandbox().await?;
+    let scene = Scene::new(&worker).await?;
+    scene.flip().await?.into_result()?;
+    let init = |interval_ms: u64| {
+        (scene.chameleon.id().to_string(), BUILD_VULNERABLE, interval_ms, wasm("chameleon-patched").to_vec(), wasm("chameleon-vulnerable").to_vec())
+    };
+
+    let failure = failure_of(scene.mallory.call(scene.switch.id(), "new").args_borsh(init(1)).max_gas().transact().await?);
+    assert!(failure.contains("Method new is private"), "unexpected failure: {failure}");
+    let status = scene.status().await?;
+    assert_eq!((status["live"].as_str(), status["flips"].as_u64(), status["min_interval_ms"].as_u64()), (Some("patched"), Some(1), Some(INTERVAL_MS)), "a stranger's call changed nothing");
+
+    // The deployer's key, which is the switch account's own: the stored builds, the count and the interval start over.
+    scene.switch.call("new").args_borsh(init(20_000)).max_gas().transact().await?.into_result()?;
+    let status = scene.status().await?;
+    assert_eq!((status["live"].as_str(), status["flips"].as_u64(), status["min_interval_ms"].as_u64()), (Some("vulnerable"), Some(0), Some(20_000)));
+    assert_eq!(status["vulnerable"]["code_hash"], sha256(wasm("chameleon-patched")).to_string(), "the builds were replaced");
     Ok(())
 }
 

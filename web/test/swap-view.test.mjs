@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSwap, parseRecorded } from '../src/swap.js';
-import { paint, viewModel } from '../src/swap-view.js';
+import { mountSwap, paint, viewModel } from '../src/swap-view.js';
 import { fakeDocument, walk } from './fake-dom.mjs';
 import { CONFIG, fakeChain, HASH, recordedJson, UNSET_CONFIG } from './swap-chain.mjs';
 
@@ -96,9 +96,9 @@ test('recorded, RPC unreachable: labeled with its date, nothing claimed live, th
   assert.equal(m.trust.word, 'ALLOW', 'the allowlist says ALLOW in the replay too');
 });
 
-test('recorded because the key allowance is spent, or because nothing is configured: each says so', () => {
+test('recorded because the demo key can no longer pay, or because nothing is configured: each says so', () => {
   const base = { ...createSwap({ config: UNSET_CONFIG, recorded }).getState(), mode: 'recorded' };
-  assert.match(view({ ...base, reason: 'allowance' }).status.text, /^Recorded on 2026-11-11\. The demo key can no longer pay for swaps \(its gas allowance is spent\)/);
+  assert.match(view({ ...base, reason: 'cannot-pay' }).status.text, /^Recorded on 2026-11-11\. The demo key can no longer pay for swaps, so the button replays the recording/);
   const unset = view({ ...base, reason: 'unconfigured', detail: 'Not set in swap-config.js: chameleonId' });
   assert.match(unset.status.text, /No live contract is set up in this copy of the page/);
   assert.equal(unset.detail, 'Not set in swap-config.js: chameleonId');
@@ -161,4 +161,34 @@ test('paint animates the card only when the verdict or hash changed, and only wh
   assert.equal(calls.length, 2);
   paint(doc, els, view(v), { animate: false });
   assert.equal(calls.length, 2, 'reduced motion: no animation');
+});
+
+// The page's own wiring, with the globals a browser provides: a tab nobody sees does not read the chain, and showing it does.
+test('mountSwap reads nothing while the tab is hidden, reads at once when it is shown, and paints what it read', async () => {
+  const chain = fakeChain();
+  const doc = fakeDocument();
+  const els = new Map();
+  const listeners = {};
+  doc.getElementById = (id) => { if (!els.has(id)) els.set(id, Object.assign(doc.createElement('div'), { textContent: '' })); return els.get(id); };
+  doc.addEventListener = (type, fn) => { listeners[type] = fn; };
+  doc.hidden = true;
+  const saved = Object.fromEntries(['document', 'fetch', 'matchMedia', 'setInterval'].map((name) => [name, globalThis[name]]));
+  Object.assign(globalThis, {
+    document: doc, matchMedia: () => ({ matches: true }), setInterval: () => 0,
+    fetch: async (url, init) => (init ? chain.fetch(url, init) : { ok: true, json: async () => recordedJson }),
+  });
+  let swap;
+  try {
+    swap = await mountSwap(doc, CONFIG);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(chain.calls.length, 0, 'hidden: no request');
+    doc.hidden = false;
+    listeners.visibilitychange();
+    for (let wait = 0; wait < 200 && els.get('pf-word').textContent === '...'; wait++) await new Promise((resolve) => setImmediate(resolve));
+    assert.ok(chain.calls.length > 0, 'shown: it reads at once');
+    assert.equal(els.get('pf-word').textContent, 'BLOCK');
+  } finally {
+    swap?.stop();
+    for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete globalThis[name]; else globalThis[name] = value; }
+  }
 });

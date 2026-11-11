@@ -21,6 +21,8 @@ export interface SwapDeployment {
   switch: string;
   /** Base58 SHA-256 of each build's wasm: what the chain reports and the registry keys. */
   codeHashes: { vulnerable: string; patched: string };
+  /** The hashes of the builds an earlier deployment ran: their registry verdicts stay, and their chameleon code is gone. */
+  retired?: { vulnerable: string; patched: string }[];
   /** The public key of the flip key: its private half is published on the web page. */
   flipKey: { publicKey: string; allowanceNear: string } | null;
   transactions: { step: string; signer: string; receiver: string; hash: string; what: string }[];

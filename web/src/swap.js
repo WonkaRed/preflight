@@ -6,6 +6,9 @@
 import { base58Decode, base58Encode, encodeFunctionCall, isHash, parseSecretKey, signTransaction } from './near.js';
 
 export const POLL_MS = 5000;
+// A visitor who has not clicked for ACTIVE_MS is probably not watching: read less often, so open tabs spare the public RPC.
+export const IDLE_POLL_MS = 15_000;
+export const ACTIVE_MS = 120_000;
 const RPC_TIMEOUT_MS = 8000;
 const LANDING_POLLS = 10;
 const LANDING_MS = 1500;
@@ -172,8 +175,15 @@ async function readOnce(env, cfg, seen) {
 
 // ---- Sending the swap --------------------------------------------------------------------------------------------
 
-const SPENT = /NotEnoughAllowance|NotEnoughBalance|AccessKeyNotFound|UNKNOWN_ACCESS_KEY/;
+// Every way the demo key can stop being able to pay (nearcore's InvalidTxError, InvalidAccessKeyError and ActionError names,
+// and the RPC's UNKNOWN_ACCESS_KEY for a deleted key): the allowance is spent, the account cannot cover gas or its storage, or the key is gone.
+const CANNOT_PAY = /NotEnoughAllowance|NotEnoughBalance|LackBalanceForState|SignerDoesNotExist|AccessKeyNotFound|UNKNOWN_ACCESS_KEY/;
+// What the switch logs, in the callback's receipt, when the chameleon's upgrade failed: the flip itself succeeded, the code did not change.
+const UPGRADE_FAILED = 'the chameleon\'s upgrade failed';
 const NONCE = /InvalidNonce/;
+
+const upgradeFailed = (result) => (result?.receipts_outcome ?? []).some((receipt) => (receipt?.outcome?.logs ?? [])
+  .some((line) => typeof line === 'string' && line.includes(UPGRADE_FAILED)));
 
 /** The contract's own panic text from a failed outcome, else a plain sentence. Chain text, so it only ever reaches the page as text. */
 function failureMessage(failure) {
@@ -188,7 +198,8 @@ const defaults = () => ({
   now: () => Date.now(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   subtle: globalThis.crypto?.subtle,
-  hidden: () => false,
+  hidden: () => globalThis.document?.hidden ?? false,
+  schedule: (fn, ms) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
 });
 
 /**
@@ -196,7 +207,7 @@ const defaults = () => ({
  *
  * state.mode   'loading' | 'live' | 'recorded' | 'empty'. Anything but 'live' is never presented as live: 'recorded'
  *              replays the bundled recording, 'empty' means there is neither a live contract nor a recording.
- * state.reason why the mode is not live: 'unconfigured' | 'rpc-down' | 'allowance' (the demo key can no longer pay for swaps).
+ * state.reason why the mode is not live: 'unconfigured' | 'rpc-down' | 'cannot-pay' (the demo key can no longer pay for swaps).
  * state.tx     the swap this visitor sent: { stage: 'pending' | 'landing' | 'done' | 'unseen' | 'failed' | 'unconfirmed', hash, message }.
  * state.waitUntil  local epoch ms before which the contract will refuse another swap, or null.
  * state.replay  the recording's current step (0 is before its first swap).
@@ -210,7 +221,8 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
     address: config.chameleonId || recorded?.chameleonId || null,
     codeHash: null, build: null, verdict: null, flips: null, waitUntil: null, tx: null,
   };
-  let timer = null;
+  let cancelTimer = () => {};
+  let activeUntil = 0;
   let stopped = false;
   let busy = false;
   let reading = null;
@@ -239,6 +251,12 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
       }
     })().finally(() => { reading = null; });
     return reading;
+  }
+
+  // Nothing live is left to show: the recording takes over for good, and the page stops reading.
+  function giveUp() {
+    spent = true;
+    return fallback('cannot-pay');
   }
 
   async function sendFlip() {
@@ -274,10 +292,15 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
       }
       const status = result?.status;
       if (isObject(status) && 'Failure' in status) {
+        if (CANNOT_PAY.test(JSON.stringify(status.Failure))) return giveUp();
         set({ tx: { stage: 'failed', hash, message: failureMessage(status.Failure) } });
         return refresh();
       }
       if (!isObject(status) || !('SuccessValue' in status)) throw new RpcError('send_tx returned no final status', 'network');
+      if (upgradeFailed(result)) {
+        set({ tx: { stage: 'failed', hash, message: 'The swap was accepted, but the chameleon\'s upgrade failed, so it still runs the previous build.' } });
+        return refresh();
+      }
       set({ tx: { stage: 'landing', hash, message: '' } });
       // The deploy is a later receipt than the call: read until the chain shows the new code, for a bounded time.
       for (let poll = 0; poll < LANDING_POLLS; poll++) {
@@ -287,10 +310,7 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
       }
       if (state.mode === 'live') set({ tx: { stage: state.codeHash !== before ? 'done' : 'unseen', hash, message: '' } });
     } catch (error) {
-      if (error instanceof RpcError && error.kind === 'rpc' && SPENT.test(error.detail)) {
-        spent = true;
-        return fallback('allowance');
-      }
+      if (error instanceof RpcError && error.kind === 'rpc' && CANNOT_PAY.test(error.detail)) return giveUp();
       const unconfirmed = sent && error instanceof RpcError && error.kind === 'network';
       set({ tx: { stage: unconfirmed ? 'unconfirmed' : 'failed', hash: sent ? hash : null, message: error instanceof RpcError ? (sent ? '' : 'Nothing was sent. ') + error.message : error.message } });
     }
@@ -299,22 +319,29 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
   async function poll() {
     if (stopped) return;
     if (!busy && !env.hidden()) await refresh();
-    if (!stopped && !spent) timer = setTimeout(poll, POLL_MS);
+    if (!stopped && !spent) cancelTimer = env.schedule(poll, env.now() < activeUntil ? POLL_MS : IDLE_POLL_MS);
   }
 
   return {
     getState: () => state,
     start() {
       stopped = false;
+      activeUntil = env.now() + ACTIVE_MS;
       if (!cfg.ok) return fallback('unconfigured', `Not set in swap-config.js: ${cfg.missing.join(', ')}`);
       return poll();
     },
-    stop() { stopped = true; clearTimeout(timer); },
+    stop() { stopped = true; cancelTimer(); },
+    /** The visitor is back (tab shown again): read at once and poll at the fast rate for a while. */
+    wake() {
+      activeUntil = env.now() + ACTIVE_MS;
+      return refresh();
+    },
     /** Live: sign and send `flip`. Recorded: step the replay. Anything else does nothing. */
     async flip() {
       if (state.mode === 'recorded') return set({ replay: (state.replay + 1) % recorded.steps.length });
       if (state.mode !== 'live' || busy || (state.waitUntil !== null && env.now() < state.waitUntil)) return;
       busy = true;
+      activeUntil = env.now() + ACTIVE_MS;
       try { await sendFlip(); } finally { busy = false; }
     },
     refresh,

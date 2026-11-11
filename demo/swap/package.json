@@ -12,7 +12,8 @@
     "deploy": "node --disable-warning=ExperimentalWarning scripts/deploy.ts",
     "flip": "node --disable-warning=ExperimentalWarning scripts/flip.ts",
     "record": "node --disable-warning=ExperimentalWarning scripts/record.ts",
-    "check": "node --disable-warning=ExperimentalWarning scripts/check.ts"
+    "check": "node --disable-warning=ExperimentalWarning scripts/check.ts",
+    "watchdog": "node --disable-warning=ExperimentalWarning scripts/watchdog.ts"
   },
   "dependencies": {
     "near-api-js": "7.4.0"

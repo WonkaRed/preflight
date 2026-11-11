@@ -2,8 +2,9 @@
 //!
 //! `flip` sends the build that is not live to the chameleon's `upgrade`, and records the flip once that upgrade has
 //! gone through. Anyone may call it (the web page signs it with a function-call key limited to this method), so it
-//! enforces a minimum interval between flips. The two builds are stored when the switch is initialised and never
-//! change: there is no method that writes or replaces them.
+//! enforces a minimum interval between flips. The two builds are stored when the switch is initialised and no method
+//! the page can reach writes or replaces them. Only the switch account's own full-access key, the deployer's, can
+//! initialise it again (`new`), which is how a new pair of builds replaces the old one.
 
 use near_sdk::json_types::Base58CryptoHash;
 use near_sdk::store::LookupMap;
@@ -107,9 +108,11 @@ pub struct Switch {
 
 #[near]
 impl Switch {
-    /// Stores both builds for good. `live` names the one the chameleon runs now. Deploy and call this in one
-    /// transaction so nobody can initialise the contract in between. All arguments are Borsh.
-    #[init]
+    /// Stores both builds. `live` names the one the chameleon runs now. Only the account itself can call it, so only
+    /// a key of this account can: deploy the code and call this in one transaction, on a fresh account or over an
+    /// older deployment, whose state it replaces. All arguments are Borsh.
+    #[private]
+    #[init(ignore_state)]
     pub fn new(
         #[serializer(borsh)] chameleon: AccountId,
         #[serializer(borsh)] live: Build,

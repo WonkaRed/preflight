@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { base58Encode } from '../src/near.js';
-import { createSwap, parseRecorded, readConfig } from '../src/swap.js';
+import { ACTIVE_MS, createSwap, IDLE_POLL_MS, parseRecorded, POLL_MS, readConfig } from '../src/swap.js';
 import { CONFIG, fakeChain, HASH, recordedJson, status, UNSET_CONFIG } from './swap-chain.mjs';
 
 const recorded = parseRecorded(recordedJson);
@@ -257,9 +257,16 @@ test('the contract refusing a swap (too soon, racing another visitor) shows its 
   assert.equal(state().mode, 'live');
 });
 
-test('a used-up key allowance, or a deleted key, switches to the recording and says why, for good', async () => {
+test('every way the demo key can stop paying switches to the recording and says why, for good', async () => {
+  const refused = (error) => (chain) => { chain.sendErrors = [{ name: 'HANDLER_ERROR', cause: { name: 'INVALID_TRANSACTION', info: { tx_execution_error: { InvalidTxError: error } } } }]; };
+  const failedOnChain = (kind) => (chain) => { chain.sendResult = { status: { Failure: { ActionError: { index: 0, kind } } } }; };
   for (const spent of [
-    (chain) => { chain.sendErrors = [{ name: 'HANDLER_ERROR', cause: { name: 'INVALID_TRANSACTION', info: { tx_execution_error: { InvalidTxError: { InvalidAccessKeyError: { NotEnoughAllowance: { allowance: '1', cost: '2' } } } } } } }]; },
+    refused({ InvalidAccessKeyError: { NotEnoughAllowance: { allowance: '1', cost: '2' } } }),
+    refused({ NotEnoughBalance: { signer_id: 'switch.example.testnet', balance: '1', cost: '2' } }),
+    refused({ LackBalanceForState: { signer_id: 'switch.example.testnet', amount: '1' } }),
+    refused({ SignerDoesNotExist: { signer_id: 'switch.example.testnet' } }),
+    refused({ InvalidAccessKeyError: { AccessKeyNotFound: { account_id: 'switch.example.testnet', public_key: 'ed25519:x' } } }),
+    failedOnChain({ LackBalanceForState: { account_id: 'switch.example.testnet', amount: '1' } }),
     (chain) => { chain.accessKeyError = 'UNKNOWN_ACCESS_KEY'; },
   ]) {
     const chain = fakeChain();
@@ -267,11 +274,37 @@ test('a used-up key allowance, or a deleted key, switches to the recording and s
     await swap.refresh();
     spent(chain);
     await swap.flip();
-    assert.deepEqual([state().mode, state().reason, state().tx], ['recorded', 'allowance', null]);
+    assert.deepEqual([state().mode, state().reason, state().tx], ['recorded', 'cannot-pay', null]);
     const calls = chain.calls.length;
     await swap.refresh();
     assert.equal(chain.calls.length, calls, 'it stops reading: there is nothing live left to show');
   }
+});
+
+test('a flip whose upgrade failed on chain is a failed swap with its transaction, not an endless wait', async () => {
+  const chain = fakeChain();
+  chain.sendResult = {
+    final_execution_status: 'EXECUTED_OPTIMISTIC', status: { SuccessValue: '' },
+    receipts_outcome: [{ outcome: { logs: [] } }, { outcome: { logs: ['the chameleon\'s upgrade failed; it still runs the previous build'] } }],
+  };
+  chain.upgradeFails = true;
+  const { swap, state } = setup(chain);
+  await swap.refresh();
+  await swap.flip();
+  assert.equal(state().tx.stage, 'failed');
+  assert.match(state().tx.message, /upgrade failed, so it still runs the previous build/);
+  assert.ok(state().tx.hash, 'the transaction link stays');
+  assert.equal(state().mode, 'live');
+  assert.equal(state().build, 'vulnerable', 'the page shows what is really deployed');
+});
+
+test('a successful flip with other logs still lands normally', async () => {
+  const chain = fakeChain();
+  chain.sendResult = { status: { SuccessValue: '' }, receipts_outcome: [{ outcome: { logs: ['flipped'] } }, {}, { outcome: {} }] };
+  const { swap, state } = setup(chain);
+  await swap.refresh();
+  await swap.flip();
+  assert.equal(state().tx.stage, 'done');
 });
 
 test('a failure before anything was sent says nothing was sent; a lost answer after sending is unconfirmed, with the hash', async () => {
@@ -320,4 +353,39 @@ test('start reads at once and then on a timer, stop ends it, and a hidden tab do
   await hidden.swap.start();
   assert.equal(hidden.state().mode, 'loading', 'nothing is read for a tab nobody sees');
   hidden.swap.stop();
+});
+
+test('with no hook given, a hidden browser tab is not read: the controller follows the page\'s own visibility', async () => {
+  const chain = fakeChain();
+  const swap = createSwap({ config: CONFIG, recorded, env: { fetch: (...args) => chain.fetch(...args), now: () => chain.nowMs, schedule: () => () => {} } });
+  globalThis.document = { hidden: true };
+  try {
+    await swap.start();
+    assert.equal(chain.calls.length, 0);
+    globalThis.document.hidden = false;
+    await swap.start();
+    assert.ok(chain.calls.length > 0);
+  } finally {
+    delete globalThis.document;
+  }
+});
+
+test('polling slows down two minutes after the last interaction, and a click or the tab coming back speeds it up again', async () => {
+  const chain = fakeChain();
+  const delays = [];
+  const { swap } = setup(chain, { env: { schedule: (fn, ms) => { delays.push([fn, ms]); return () => {}; } } });
+  const tick = async () => { const [fn] = delays.at(-1); await fn(); return delays.at(-1)[1]; };
+  await swap.start();
+  assert.equal(delays.at(-1)[1], POLL_MS);
+  chain.nowMs += ACTIVE_MS - 1;
+  assert.equal(await tick(), POLL_MS, 'still within the active window');
+  chain.nowMs += 2;
+  assert.equal(await tick(), IDLE_POLL_MS, 'quiet for two minutes: slower');
+  chain.nowMs += 60_000;
+  await swap.flip();
+  assert.equal(await tick(), POLL_MS, 'a click: fast again');
+  chain.nowMs += ACTIVE_MS + 1;
+  assert.equal(await tick(), IDLE_POLL_MS);
+  await swap.wake();
+  assert.equal(await tick(), POLL_MS, 'the tab coming back: fast again');
 });
