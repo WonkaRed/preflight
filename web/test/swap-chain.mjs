@@ -29,8 +29,8 @@ export function fakeChain() {
   const chain = {
     build: 'vulnerable', flips: 3, nextFlipMs: 0, minIntervalMs: 10_000, nowMs: 1_800_000_000_000, nonce: 1000,
     verdicts: {
-      [HASH.vulnerable]: { code_hash: HASH.vulnerable, status: 'Unsafe', rule_ids: ['PF001'] },
-      [HASH.patched]: { code_hash: HASH.patched, status: 'Safe', rule_ids: [] },
+      [HASH.vulnerable]: { code_hash: HASH.vulnerable, status: 'Unsafe', rule_ids: ['PF001'], report_url: 'https://example.com/vulnerable.json', auditor: 'auditor.example.testnet' },
+      [HASH.patched]: { code_hash: HASH.patched, status: 'Safe', rule_ids: [], report_url: 'https://example.com/patched.json', auditor: 'auditor.example.testnet' },
     },
     lag: 0, lagAfterSend: 0, target: null, // account reads that still show the old build after a swap (the deploy receipt lands later)
     sendErrors: [],  // JSON-RPC errors send_tx answers with, one per call, before it succeeds

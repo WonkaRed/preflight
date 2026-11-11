@@ -28,7 +28,7 @@ test('V live: the allowlist says ALLOW, Preflight says BLOCK with PF001, the has
   assert.equal(m.trust.word, 'ALLOW');
   assert.equal(m.trust.note, 'chameleon.example.testnet is on the allowlist, so it passes.');
   assert.deepEqual([m.pf.tone, m.pf.word, m.pf.rules, m.pf.build, m.pf.hash], ['block', 'BLOCK', 'PF001', 'Vulnerable build', HASH.vulnerable]);
-  assert.match(m.pf.line, /anyone can mark an order released without paying/);
+  assert.match(m.pf.line, /anyone can credit themselves a balance without paying/);
   assert.deepEqual(m.button, { label: 'Swap the code', disabled: false });
   assert.equal(m.flips, 'Swaps so far: 3');
 });
@@ -187,6 +187,8 @@ test('mountSwap reads nothing while the tab is hidden, reads at once when it is 
     for (let wait = 0; wait < 200 && els.get('pf-word').textContent === '...'; wait++) await new Promise((resolve) => setImmediate(resolve));
     assert.ok(chain.calls.length > 0, 'shown: it reads at once');
     assert.equal(els.get('pf-word').textContent, 'BLOCK');
+    assert.equal(els.get('agent-word').textContent, 'REFUSED', 'the agent panel plays on the same read');
+    assert.equal(els.get('agent-hash').textContent, HASH.vulnerable);
   } finally {
     swap?.stop();
     for (const [name, value] of Object.entries(saved)) { if (value === undefined) delete globalThis[name]; else globalThis[name] = value; }

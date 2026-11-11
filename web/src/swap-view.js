@@ -5,10 +5,11 @@
 import { isHash } from './near.js';
 import { clean, h } from './report.js';
 import { createSwap, isAccountId, parseRecorded } from './swap.js';
+import { agentScript, mountAgent } from './swap-agent.js';
 import { SWAP_CONFIG } from './swap-config.js';
 
 const BUG_LINE = {
-  PF001: 'Any account can call the contract\'s callback directly, so anyone can mark an order released without paying for it.',
+  PF001: 'Any account can call the contract\'s callback directly, so anyone can credit themselves a balance without paying and withdraw what others deposited.',
 };
 
 const when = (state) => state.recorded?.recordedAt ?? '';
@@ -83,6 +84,7 @@ export function viewModel(state, { now, explorerUrl }) {
       ? { word: 'ALLOW', note: `${address} is on the allowlist, so it passes.` }
       : { word: 'No data', note: '' },
     pf,
+    agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, step: replay ? state.replay : 0 }),
     button,
     tx,
     flips: replay ? (state.replay === 0 ? '' : `Recorded swap ${state.replay} of ${state.recorded.steps.length - 1}`) : mode === 'live' && state.flips !== null ? `Swaps so far: ${state.flips}` : '',
@@ -131,11 +133,23 @@ export async function mountSwap(doc = document, config = SWAP_CONFIG) {
     if (response.ok) recorded = parseRecorded(await response.json());
   } catch { /* no recording: the section says so */ }
 
+  const agent = mountAgent(doc, { calm });
   let swap;
-  const render = () => paint(doc, els, viewModel(swap.getState(), { now: Date.now(), explorerUrl: config.explorerUrl }), { animate: !calm });
+  let watching = false;
+  let shown = '';
+  const render = () => {
+    const state = swap.getState();
+    const model = viewModel(state, { now: Date.now(), explorerUrl: config.explorerUrl });
+    paint(doc, els, model, { animate: !calm });
+    agent.update(model.agent);
+    // The visitor asked for a swap: when the verdict it caused is off screen (a phone), bring it up, once, and never on load.
+    const verdict = `${model.pf.word}|${model.pf.hash}`;
+    if (watching && verdict !== shown) { watching = false; els.pfCard.scrollIntoView?.({ block: 'nearest', behavior: calm ? 'auto' : 'smooth' }); }
+    shown = verdict;
+  };
   swap = createSwap({ config, recorded, onChange: render });
   render();
-  els.button.addEventListener('click', () => swap.flip());
+  els.button.addEventListener('click', () => { watching = true; Promise.resolve(swap.flip()).finally(() => { watching = false; }); });
   // The countdown on the button needs a repaint each second; nothing else changes between polls.
   setInterval(() => { if (swap.getState().waitUntil !== null) render(); }, 500);
   doc.addEventListener('visibilitychange', () => { if (!doc.hidden) swap.wake(); });

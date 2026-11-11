@@ -74,7 +74,7 @@ A function-call key's allowance cannot be raised in place; the watchdog replaces
 ### The watchdog
 
 ```sh
-PREFLIGHT_TESTNET_KEYS=~/.claude/secrets/survival-testnet make -C demo/swap watchdog
+PREFLIGHT_TESTNET_KEYS=<dir with <account>.key files> make -C demo/swap watchdog
 # or, without make: cd demo/swap && PREFLIGHT_TESTNET_KEYS=<dir> npm run --silent watchdog
 ```
 
@@ -204,4 +204,10 @@ Every step is recorded in `deployment.json` as it happens, and a rerun skips the
 
 ## Keeping it alive
 
-`systemd/preflight-swap-watchdog.service` and `.timer` run the watchdog every 30 minutes (persistent, so a run missed while the machine was off happens at the next boot). Install: `cp systemd/preflight-swap-watchdog.* ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable --now preflight-swap-watchdog.timer`. The service points at this checkout (`WorkingDirectory=`), so move it with the checkout, and `PREFLIGHT_TESTNET_KEYS` at `~/.claude/secrets/survival-testnet`. When a run exits non-zero, the unit runs `pixelbot-notify "Preflight Swap watchdog could not repair | 0 | Survival"`; the watchdog's line is in `journalctl --user -u preflight-swap-watchdog`. The watchdog tops up the switch and the chameleon only from `preflight-guard.testnet`; when its line says the funder has nothing to give, fund that account first.
+A systemd user timer runs the watchdog every 30 minutes (persistent, so a run missed while the machine was off happens at the next boot). The units are in `systemd/` (`preflight-swap-watchdog.service` and `.timer`). Install: `cp systemd/preflight-swap-watchdog.* ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable --now preflight-swap-watchdog.timer`.
+
+- The service points at this checkout (`WorkingDirectory=`), so move it with the checkout.
+- Set `PREFLIGHT_TESTNET_KEYS` to your key directory.
+- The unit's alert command, which runs when a run exits non-zero, is a placeholder for your own notifier.
+- The watchdog's line is in `journalctl --user -u preflight-swap-watchdog`.
+- The watchdog tops up the switch and the chameleon only from `preflight-guard.testnet`; when its line says the funder has nothing to give, fund that account first.

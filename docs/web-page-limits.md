@@ -1,6 +1,6 @@
 # The in-browser scanner: what it does and does not do
 
-[`web/`](../web) is a static page that runs the scanner in the browser. The root [README](../README.md) says how to build and serve it. The page runs the same rules as the command line and its output matches `--json` byte for byte, with these limits:
+[`web/`](../web) is a static page that runs the scanner in the browser. [Getting started](getting-started.md) says how to build and serve it. The page runs the same rules as the command line and its output matches `--json` byte for byte, with these limits:
 
 - Code nested more than about 2000 levels deep runs the in-browser build out of stack. The page says so and points to the command line.
 - Pasted source is a single file with no `Cargo.toml`, so PF022, which reads the build profile, stays silent on it.

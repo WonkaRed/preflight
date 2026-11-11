@@ -24,6 +24,8 @@ const NO_CODE_HASH = '11111111111111111111111111111111';
 const ACCOUNT_ID = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
 const RULE_ID = /^PF\d{3}$/;
 const DECISION = { Unsafe: 'BLOCK', Warn: 'WARN', Safe: 'ALLOW' };
+export const STATUS_OF = Object.fromEntries(Object.entries(DECISION).map(([status, decision]) => [decision, status]));
+const REPORT_URL = /^https:\/\/[^\s"<>]{1,300}$/;
 const BUILDS = ['vulnerable', 'patched'];
 
 export const isAccountId = (id) => typeof id === 'string' && id.length >= 2 && id.length <= 64 && ACCOUNT_ID.test(id);
@@ -55,6 +57,8 @@ export function readConfig(config) {
 }
 
 const GUARD_DECISIONS = ['allow', 'block', 'warn'];
+// A report link is chain or recording text: kept only when it is a plain https URL, and only ever shown as text.
+const reportUrl = (url) => (typeof url === 'string' && REPORT_URL.test(url) ? url : null);
 
 /**
  * `demo/swap/recorded.json` (written by its `record` script) as the page replays it, or null if it is not that file.
@@ -68,7 +72,7 @@ export function parseRecorded(json) {
     if (!isObject(snapshot) || !BUILDS.includes(snapshot.live) || !isHash(snapshot.codeHash) || !GUARD_DECISIONS.includes(snapshot.decision)) return null;
     if (txHash !== null && !isHash(txHash)) return null;
     if (verdict !== null && !(isObject(verdict) && verdict.status in DECISION && Array.isArray(verdict.rule_ids) && verdict.rule_ids.every((id) => RULE_ID.test(id)))) return null;
-    return { build: snapshot.live, codeHash: snapshot.codeHash, decision: snapshot.decision.toUpperCase(), ruleIds: verdict?.rule_ids ?? [], registered: verdict !== null, txHash };
+    return { build: snapshot.live, codeHash: snapshot.codeHash, decision: snapshot.decision.toUpperCase(), ruleIds: verdict?.rule_ids ?? [], registered: verdict !== null, auditor: null, reportUrl: reportUrl(verdict?.report_url), txHash };
   };
   const steps = [step(json.flips[0]?.before, null), ...json.flips.map((flip) => step(flip?.after, flip?.txHash))];
   return steps.every(Boolean) ? { recordedAt: json.recordedAt.slice(0, 10), chameleonId: json.chameleon, steps } : null;
@@ -181,11 +185,31 @@ function parseStatus(raw) {
 
 /** The registry's answer for one hash, as a decision. No verdict is a WARN, as in the guard: unaudited code, or code changed since its audit. */
 function parseVerdict(raw, codeHash) {
-  if (raw === null) return { decision: 'WARN', ruleIds: [], registered: false };
+  if (raw === null) return { decision: 'WARN', ruleIds: [], registered: false, auditor: null, reportUrl: null };
   if (!isObject(raw) || raw.code_hash !== codeHash || !(raw.status in DECISION)) throw new RpcError('registry get_verdict returned a malformed verdict', 'shape');
   const ids = raw.rule_ids;
   if (!Array.isArray(ids) || ids.length > 32 || !ids.every((id) => RULE_ID.test(id))) throw new RpcError('registry get_verdict returned malformed rule ids', 'shape');
-  return { decision: DECISION[raw.status], ruleIds: ids, registered: true };
+  return { decision: DECISION[raw.status], ruleIds: ids, registered: true, auditor: isAccountId(raw.auditor) ? raw.auditor : null, reportUrl: reportUrl(raw.report_url) };
+}
+
+/**
+ * The decision-log line the guard would write for a call to `contract.method` on code with this hash and registry verdict
+ * (`verdict` is what the controller holds: decision, ruleIds, registered, auditor, reportUrl). Same fields, same order and
+ * same reason text as guard/src/log.ts and guard/src/check.ts; `at` (epoch ms) is left out when the check did not just run.
+ * A Warn is declined here as in an unattended guard run, and an Allow is `approved`: the line the guard writes before it signs.
+ */
+export function guardEntry({ contract, method, deposit, codeHash, verdict, at = null }) {
+  const decision = verdict.decision.toLowerCase();
+  const rules = verdict.ruleIds.length ? ` (${verdict.ruleIds.join(', ')})` : '';
+  const published = [verdict.auditor && `published by ${verdict.auditor}`, verdict.reportUrl && `report ${verdict.reportUrl}`].filter(Boolean).join(', ');
+  const reasons = verdict.registered
+    ? [`registry verdict ${STATUS_OF[verdict.decision]}${rules}${published && `: ${published}`}`]
+    : [`code hash ${codeHash} has no verdict in the registry: unaudited code, or code changed since its audit`];
+  if (decision === 'warn') reasons.push('not approved by the approval callback');
+  return {
+    ...(at === null ? {} : { timestamp: new Date(at).toISOString() }),
+    contract, method, deposit, codeHash, decision, outcome: decision === 'allow' ? 'approved' : 'refused', reasons,
+  };
 }
 
 /** The hash of the code actually deployed: the account's claimed hash, confirmed by hashing the code bytes themselves (once per new hash). */

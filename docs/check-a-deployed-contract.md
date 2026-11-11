@@ -1,6 +1,6 @@
 # Checking a deployed contract: what `preflight account` reads and how it exits
 
-The root [README](../README.md) shows one run. This page holds the rest of the detail.
+[Getting started](getting-started.md) shows one run. This page holds the rest of the detail.
 
 ## What it reads
 

@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    # Ubuntu 24.04 has glibc 2.39, which the NEAR sandbox binary needs (see "Requirements" in the README).
+    # Ubuntu 24.04 has glibc 2.39, which the NEAR sandbox binary needs (see docs/getting-started.md).
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:

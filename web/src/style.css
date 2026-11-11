@@ -107,7 +107,7 @@ button, textarea, input { font: inherit; color: inherit; }
 .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin: 1.25rem 0 0; color: var(--muted); }
 .filterbar .btn { padding: 0.25rem 0.7rem; font-size: 0.9rem; }
 .group { margin-top: 1.6rem; }
-.ghead { position: sticky; top: 0; z-index: 2; margin: 0; padding: 0.55rem 0; background: var(--bg); display: flex; align-items: baseline; gap: 0.6rem; font: 700 1.25rem/1.2 var(--serif); }
+.ghead { position: sticky; top: 0; z-index: 2; margin: 0 0 0.5rem; padding: 0.55rem 0; background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 0.5rem 0.5rem -0.5rem color-mix(in srgb, var(--ink) 22%, transparent); display: flex; align-items: baseline; gap: 0.6rem; font: 700 1.25rem/1.2 var(--serif); }
 .gcount { font: 600 0.95rem/1 var(--sans); color: var(--sev); }
 .flist { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.65rem; }
 .finding {
@@ -149,19 +149,27 @@ button, textarea, input { font: inherit; color: inherit; }
 /* The Swap: one address, two checks. The left card never changes; the right card is the page's one moving part. */
 .swap { padding-block: 0.9rem 0; }
 .swap h1 { margin: 0; font: 700 clamp(1.9rem, 4.2vw, 2.75rem)/1.08 var(--serif); letter-spacing: -0.02em; text-wrap: balance; }
-.swap-lede { margin: 0.3rem 0 0; font: 400 clamp(1.15rem, 2.4vw, 1.45rem)/1.3 var(--serif); }
-.swap-status { margin: 0.85rem 0 0; padding: 0.45rem 0.85rem; max-width: max-content; background: var(--wash); border: 1px solid var(--line); border-radius: 6px; font-size: 0.92rem; }
+.swap-lede { margin: 0.35rem 0 0; max-width: 62rem; font: 400 clamp(1.05rem, 1.7vw, 1.2rem)/1.35 var(--serif); }
+.swap-status { margin: 0; padding: 0.45rem 0.85rem; max-width: max-content; background: var(--wash); border: 1px solid var(--line); border-radius: 6px; font-size: 0.92rem; }
 .swap-status[data-tone=recorded], .swap-status[data-tone=empty] { max-width: 46rem; background: var(--warning-tint); border-color: var(--warning-edge); border-left-width: 5px; }
 .swap-status[data-tone=live]::before { content: ""; display: inline-block; width: 0.55rem; height: 0.55rem; margin-right: 0.55rem; border-radius: 50%; background: var(--allow-edge); }
 .swap-detail { margin: 0.4rem 0 0; color: var(--muted); font: 0.82rem/1.4 var(--mono); overflow-wrap: anywhere; }
 .swap-detail:empty { display: none; }
-.swap-address { margin: 0.9rem 0 0; }
-.swap-address code { display: block; padding: 0.55rem 0.9rem; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: clamp(1.05rem, 0.6rem + 2.6vw, 2rem); font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.swap-address { margin: 0.7rem 0 0; }
+.swap-address code { display: block; padding: 0.55rem 0.9rem; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; font-size: clamp(1.05rem, 0.6rem + 2.6vw, 1.7rem); font-weight: 600; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .swap-address a { color: inherit; text-decoration: none; }
 .swap-address a:hover { text-decoration: underline; }
 
-.swap-cards { display: grid; gap: 0.75rem; margin-top: 0.75rem; }
+.swap-stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.75rem; margin-top: 0.75rem; }
+.swap-cards { display: grid; gap: 0.75rem; }
 @media (min-width: 40rem) { .swap-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; } }
+/* Wide: the two cards stack on the left and the agent plays beside them, so the first screen holds both. */
+@media (min-width: 62rem) {
+  .swap-stage { grid-template-columns: minmax(0, 5fr) minmax(0, 6fr); gap: 1rem; align-items: start; }
+  .swap-stage .swap-cards { grid-template-columns: minmax(0, 1fr); gap: 0.75rem; }
+  .swap-stage .card-line { min-height: 0; }
+  .swap-stage .swap-cards .word { font-size: clamp(2.2rem, 3.4vw, 2.8rem); }
+}
 .card { --c-bg: var(--surface); --c-fg: var(--ink); --c-edge: var(--line); --c-sub: var(--muted); display: flex; flex-direction: column; padding: clamp(1rem, 3vw, 1.35rem); background: var(--c-bg); color: var(--c-fg); border: 1px solid var(--c-edge); border-radius: 10px; }
 .card[data-tone=trust] { --c-bg: var(--wash); }
 .card[data-tone=block] { --c-bg: var(--severe-bg); --c-fg: var(--severe-fg); --c-edge: var(--severe-edge); --c-sub: color-mix(in srgb, var(--severe-fg) 78%, transparent); }
@@ -179,15 +187,58 @@ button, textarea, input { font: inherit; color: inherit; }
 .hashline b { font-weight: 600; }
 .hashline code { font-size: 0.82rem; overflow-wrap: anywhere; }
 
-.swap-act { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem; margin-top: 1rem; }
+/* The agent panel: a transcript, one row per step, each shown in turn. Rows keep their space while hidden, so nothing jumps. */
+.agent { padding: clamp(1rem, 3vw, 1.35rem); background: var(--surface); border: 1px solid var(--line); border-radius: 10px; }
+.agent h2 { margin: 0; font: 700 1.15rem/1.25 var(--serif); }
+.agent h3 { margin: 0; font: 650 0.9rem/1.3 var(--sans); color: var(--muted); }
+.agent-note { margin: 0.45rem 0 0; color: var(--muted); font-size: 0.88rem; line-height: 1.45; }
+.agent-note b { color: var(--ink); }
+.agent-note a { color: var(--focus); }
+.agent-steps { list-style: none; margin: 0.75rem 0 0.7rem; padding: 0; }
+.astep { position: relative; margin: 0; padding: 0 0 0.65rem 1.1rem; border-left: 2px solid var(--line); }
+.astep:last-child { padding-bottom: 0; border-left-color: transparent; }
+.astep::before { content: ""; position: absolute; left: -0.36rem; top: 0.3rem; width: 0.7rem; height: 0.7rem; border-radius: 50%; background: var(--line); border: 2px solid var(--surface); }
+.astep p { margin: 0.2rem 0 0; overflow-wrap: anywhere; }
+.astep[data-state=off] { visibility: hidden; opacity: 0; }
+.astep[data-state=on] { visibility: visible; opacity: 1; }
+.astep code { overflow-wrap: anywhere; }
+.astep blockquote { margin: 0.25rem 0 0; padding: 0.45rem 0.75rem; background: var(--wash); border-left: 3px solid var(--line); border-radius: 6px; font-size: 0.88rem; line-height: 1.45; }
+.astep mark { padding: 0.05rem 0.25rem; background: var(--warning-bg); color: var(--warning-fg); border-bottom: 2px solid var(--severe-edge); border-radius: 3px; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+.astep-aside { color: var(--muted); font-size: 0.8rem; }
+.acheck { font-size: 0.92rem; }
+.agent-out { margin-top: 0.1rem; }
+.agent-out .word { margin-top: 0; font-size: clamp(2rem, 5vw, 2.8rem); }
+.agent-out .card-line { min-height: 0; }
+.agent-log { margin: 0.6rem 0 0; padding: 0.55rem 0.7rem; background: color-mix(in srgb, var(--c-fg) 12%, transparent); border-radius: 6px; font: 0.78rem/1.45 var(--mono); white-space: pre; overflow-x: auto; }
+.agent-out .card-sub { margin-top: 0.5rem; }
+@media (min-width: 40rem) {
+  .agent-out { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0 1.1rem; padding-block: 0.9rem; }
+  .agent-out .agent-log, .agent-out .card-sub { grid-column: 1 / -1; }
+}
+.agent-foot { display: grid; gap: 0.6rem; justify-items: start; }
+.agent-foot .agent-note { margin: 0; font-size: 0.82rem; }
+.agent .btn { padding: 0.3rem 0.8rem; font-size: 0.9rem; }
+
+.swap-act { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem; margin-top: 0.75rem; }
 .swap-btn { min-height: 3rem; padding: 0.7rem 1.7rem; font-size: 1.1rem; }
 .swap-btn:disabled { cursor: not-allowed; }
 .swap-flips { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
-.swap-tx { margin: 0.6rem 0 0; min-height: 1.55em; color: var(--muted); overflow-wrap: anywhere; }
+.swap-tx { margin: 0; color: var(--muted); overflow-wrap: anywhere; }
+.swap-tx:empty { display: none; }
 .swap-tx a { color: var(--focus); }
 .swap-print { margin: 0.5rem 0 0; max-width: 56rem; color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
 .swap + .intro { margin-top: 1.5rem; padding-top: 1.5rem; border-top: 1px solid var(--line); }
-@media (max-width: 40rem) { .swap-btn { width: 100%; } }
+/* A phone: the swap button and both verdicts have to share the first screen, so the cards drop their sub-lines. */
+@media (max-width: 40rem) {
+  .swap-btn { flex: 1 1 auto; }
+  .swap-act { gap: 0.5rem 0.9rem; }
+  .swap-status { padding: 0.35rem 0.7rem; font-size: 0.85rem; }
+  .swap-cards .card { padding: 0.8rem 1rem; }
+  .swap-cards .card-sub, .swap-cards #swap-trust .hashline { display: none; }
+  .swap-cards .word { margin-top: 0.3rem; font-size: 2.1rem; }
+  .swap-cards .card-line { min-height: 0; margin-top: 0.3rem; }
+  .swap-cards .hashline { padding-top: 0.4rem; }
+}
 
 /* Workbench: input on the left, result on the right once there is room */
 .bench { display: grid; gap: 1.25rem; align-items: start; }
@@ -211,6 +262,7 @@ button, textarea, input { font: inherit; color: inherit; }
 .examples input, .segment input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
 .example { display: grid; gap: 0.1rem; height: 100%; padding: 0.55rem 0.7rem; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); }
 .example b { font: 700 0.85rem/1.2 var(--mono); color: var(--sev); }
+.nobreak { white-space: nowrap; }
 .example span { font-size: 0.86rem; line-height: 1.3; color: var(--muted); }
 .examples input:checked + .example { background: var(--sev-tint); border-color: var(--sev); box-shadow: inset 0 0 0 1px var(--sev); }
 .examples input:checked + .example span { color: var(--ink); }
@@ -261,4 +313,6 @@ textarea { min-height: 18rem; height: 60vh; max-height: 36rem; resize: vertical;
 @media (prefers-reduced-motion: no-preference) {
   .tcell, .btn, .tabs button, .segment span, .example { transition: background-color 0.12s, border-color 0.12s; }
   .card { transition: background-color 0.35s, border-color 0.35s; }
+  .astep { transition: opacity 0.35s, transform 0.35s; }
+  .astep[data-state=off] { transform: translateY(0.4rem); }
 }

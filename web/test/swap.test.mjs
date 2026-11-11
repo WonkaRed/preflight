@@ -75,7 +75,7 @@ test('live: the vulnerable build is BLOCK with its rule, read by the hash of the
   assert.equal(state().mode, 'live');
   assert.equal(state().codeHash, HASH.vulnerable);
   assert.equal(state().build, 'vulnerable');
-  assert.deepEqual(state().verdict, { decision: 'BLOCK', ruleIds: ['PF001'], registered: true });
+  assert.deepEqual(state().verdict, { decision: 'BLOCK', ruleIds: ['PF001'], registered: true, auditor: 'auditor.example.testnet', reportUrl: 'https://example.com/vulnerable.json' });
   assert.equal(state().flips, 3);
   const lookup = chain.calls.find((c) => c.params?.method_name === 'get_verdict');
   assert.deepEqual(JSON.parse(Buffer.from(lookup.params.args_base64, 'base64')), { code_hash: HASH.vulnerable }, 'the registry is asked about the hash');
@@ -95,10 +95,10 @@ test('live: code with no registry verdict is WARN, and a Warn verdict is WARN wi
   delete chain.verdicts[HASH.vulnerable];
   const { swap, state } = setup(chain);
   await swap.refresh();
-  assert.deepEqual(state().verdict, { decision: 'WARN', ruleIds: [], registered: false });
+  assert.deepEqual(state().verdict, { decision: 'WARN', ruleIds: [], registered: false, auditor: null, reportUrl: null });
   chain.verdicts[HASH.vulnerable] = { code_hash: HASH.vulnerable, status: 'Warn', rule_ids: ['PF012'] };
   await swap.refresh();
-  assert.deepEqual(state().verdict, { decision: 'WARN', ruleIds: ['PF012'], registered: true });
+  assert.deepEqual(state().verdict, { decision: 'WARN', ruleIds: ['PF012'], registered: true, auditor: null, reportUrl: null });
 });
 
 test('live: a hash that is neither build the switch knows has no build label, and the registry still decides', async () => {
