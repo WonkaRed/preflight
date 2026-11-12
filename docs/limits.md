@@ -29,6 +29,9 @@ The README's Limits section is the short version. This page has the full text of
 - The Swap is a demonstration of what each check keys on, not a measure of either. The "An address allowlist" card is a real baseline, the check agent wallets and NEAR function-call keys scoped to one contract already give you, not a model of any particular wallet or agent. The registry's auditor is an account I control.
 - The key in the page is public on purpose: it is a function-call key that can only call `flip` on a demo contract, with a small gas allowance, and everything on it is NEAR testnet, read through two public RPC endpoints (FastNEAR and dRPC) that the page fails over between because either may throttle.
 - When the demo key can no longer pay (allowance spent, account balance short, key removed) or the RPC is unreachable the button replays `demo/swap/recorded.json` and the page says so.
+- Credit forged while the vulnerable build is live stays on the books after the patched build is swapped back in, as it would after a real incident. Swapping back stops new forgeries; it does not erase old ones.
+- The flip key and the robber key are public by design, so anyone can spend their allowance or keep flipping. The watchdog refills them from testnet funds.
+- The escrow shops of the guard demo (the PF001 fixture pair) let a caller create order entries that the contract pays storage for. The owner tops them up.
 - The page signs with the browser's built-in Ed25519 (WebCrypto), which older browsers lack; there it says so and nothing is sent.
 
 ## Model runs and the testnet deployment

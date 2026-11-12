@@ -300,7 +300,7 @@ async fn a_forged_credit_cannot_spend_the_contracts_own_money_so_the_flip_keeps_
 }
 
 #[tokio::test]
-async fn a_deposit_pays_for_the_storage_of_the_balance_entry_it_creates_and_the_contract_never_does() -> Result<()> {
+async fn a_deposit_pays_for_the_storage_of_the_balance_entry_it_creates() -> Result<()> {
     for patched in [false, true] {
         let worker = sandbox().await?;
         let scene = Scene::new(&worker).await?;
@@ -322,6 +322,33 @@ async fn a_deposit_pays_for_the_storage_of_the_balance_entry_it_creates_and_the_
         let credited = scene.balance_of(&scene.victim).await?.as_yoctonear();
         scene.deposit(&scene.victim, 1).await?;
         assert_eq!(scene.balance_of(&scene.victim).await?.as_yoctonear(), credited + NearToken::from_millinear(990).as_yoctonear());
+    }
+    Ok(())
+}
+
+/// `withdraw` from an account with no balance entry is refused and writes nothing, so a stranger cannot make the
+/// contract pay for storage: not with an amount of 0, not with any other, and not by calling it again and again.
+#[tokio::test]
+async fn a_withdraw_from_an_account_with_no_entry_is_refused_and_the_contract_pays_for_no_storage() -> Result<()> {
+    for patched in [false, true] {
+        let worker = sandbox().await?;
+        let scene = Scene::new(&worker).await?;
+        scene.deposit(&scene.victim, 10).await?;
+        if patched {
+            scene.flip().await?.into_result()?;
+        }
+        let storage = scene.chameleon.view_account().await?.storage_usage;
+        for yocto in [0, 1, 1_000_000_000_000_000_000_000_000] {
+            let failure = failure_of(scene.withdraw_yocto(&scene.mallory, yocto).await?);
+            assert!(failure.contains("no balance"), "patched={patched}, amount {yocto}: unexpected failure: {failure}");
+        }
+        assert_eq!(scene.chameleon.view_account().await?.storage_usage, storage, "patched={patched}: the refused calls added no storage");
+        assert_eq!(scene.balance_of(&scene.mallory).await?, NearToken::from_yoctonear(0));
+
+        // An account that has an entry is updated in place: a withdrawal of 0 and a real one leave the storage as it was.
+        scene.withdraw_yocto(&scene.victim, 0).await?.into_result()?;
+        scene.withdraw(&scene.victim, 1).await?.into_result()?;
+        assert_eq!(scene.chameleon.view_account().await?.storage_usage, storage, "patched={patched}: an existing entry is updated in place");
     }
     Ok(())
 }
@@ -463,13 +490,12 @@ fn hex(bytes: &[u8]) -> String {
 }
 
 /// The patched build is the vulnerable one plus a `#[private]`: no state, method or signature differs, so the
-/// switch can swap one for the other without a migration.
+/// switch can swap one for the other without a migration. Comments included: the README and the page say one line.
 #[test]
 fn the_two_chameleon_sources_differ_only_in_the_callback_guard() -> Result<()> {
     let read = |build: &str| std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("../chameleon/{build}/src/lib.rs")));
     let (vulnerable, patched) = (read("vulnerable")?, read("patched")?);
-    let code = |source: &str| source.lines().filter(|line| !line.trim_start().starts_with("//")).map(str::to_owned).collect::<Vec<_>>();
-    let (vulnerable, patched) = (code(&vulnerable), code(&patched));
+    let (vulnerable, patched): (Vec<&str>, Vec<&str>) = (vulnerable.lines().collect(), patched.lines().collect());
     assert_eq!(vulnerable.len() + 1, patched.len(), "only the `#[private]` line is added");
     let mut patched_rest = patched.clone();
     let private = patched_rest.iter().position(|line| line.trim() == "#[private]").context("no #[private] in the patched build")?;

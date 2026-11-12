@@ -9,63 +9,59 @@ import { guardEntry, STATUS_OF } from './swap.js';
 /** The call the injected page asks for: the chameleon's payable `deposit` (demo/swap/chameleon), with 0.5 NEAR attached. */
 export const CALL = { method: 'deposit', deposit: '500000000000000000000000', label: '0.5 NEAR' };
 
+/** What each registry decision does to the call. Only a BLOCK ends the story: it is the call the owner's swap turns into a refusal. */
 const OUTCOME = {
   BLOCK: { tone: 'block', word: 'REFUSED', line: 'The guard refused the call before signing. Nothing was signed or sent.' },
   WARN: { tone: 'warn', word: 'DECLINED', line: 'The guard asks a human before it signs a Warn. Nobody is here, so the call is declined. Nothing was signed or sent.' },
-  ALLOW: { tone: 'allow', word: 'ALLOWED', line: 'ALLOWED is the right answer for this code: it is the fixed build. Guard allows; the call would be signed (not sent in this demo). No known issue fired on this exact code (the chain stores that status under the name Safe): the vault credits the deposit to the agent, less its 1% fee, and the agent can withdraw it.' },
+  ALLOW: { tone: 'allow', word: 'ALLOWED', line: 'Fixed code. Payment goes through.' },
 };
 /** What the verdict says is wrong with the code, in the vault's terms (the chameleon is a deposit vault). */
 const HARM = {
-  PF001: (build) => `On ${build} anyone can credit themselves a balance without paying and withdraw what the agent deposits (PF001).`,
+  PF001: 'On the vulnerable build anyone can credit themselves a balance without paying and withdraw what the agent deposits (PF001).',
 };
 /** What a rule id means, in words. */
 export const RULE_WORDS = { PF001: 'anyone can credit themselves a balance' };
-const harm = (verdict, build = 'this build') => HARM[verdict.ruleIds.find((rule) => HARM[rule])]?.(build) ?? `The registry marks ${build === 'this build' ? 'this exact code' : build} Unsafe${verdict.ruleIds.length ? ` (${verdict.ruleIds.join(', ')})` : ''}.`;
+const harm = (verdict) => HARM[verdict.ruleIds.find((rule) => HARM[rule])] ?? `The registry marks that code Unsafe${verdict.ruleIds.length ? ` (${verdict.ruleIds.join(', ')})` : ''}.`;
 const NOTE = {
   live: 'Composed here from the live reads above, with the guard\'s decision-log fields.',
   recorded: 'Composed from the recorded verdict, not a live check, with the guard\'s decision-log fields.',
 };
+const SOURCE = { live: 'Live read', recorded: 'Recorded' };
 
 const verdictText = (verdict) => (verdict.registered
   ? `${STATUS_OF[verdict.decision]}${verdict.ruleIds.length ? ` (${verdict.ruleIds.join(', ')})` : ''}`
   : 'none: unaudited code, or code changed since its audit');
-/** The guard check in words anyone can read; the verdict text above is the technical line under it. */
-const plainCheck = (verdict) => (verdict.decision === 'BLOCK'
-  ? (verdict.ruleIds.some((rule) => RULE_WORDS[rule]) ? 'The code at this address is the one with the hole.' : 'The code at this address is marked unsafe.')
-  : verdict.decision === 'ALLOW' ? 'The code at this address is the fixed one.'
-    : verdict.registered ? 'The code at this address has a warning on record.' : 'Nobody has vouched for the code at this address.');
-
-/** The same call on the other build that ran at this address, as the registry judges that build. */
-function contrast({ codeHash, verdict }) {
-  const outcome = OUTCOME[verdict.decision];
-  const result = verdict.decision === 'BLOCK' ? 'the guard stops the call before signing' : `the result is ${outcome.word}`;
-  const why = verdict.decision === 'BLOCK' ? ` ${harm(verdict, 'that code')}` : '';
-  return { tone: outcome.tone, word: outcome.word, hash: codeHash, line: `The same call on the other code that ran at this address: the registry verdict for it is ${verdictText(verdict)}, so ${result}.${why}` };
-}
+/** The first recorded step with this decision: the other build's side of the story when the chain is not showing it. */
+const recordedStep = (recorded, decision) => recorded?.steps.find((step) => step.decision === decision) ?? null;
 
 /**
- * What the panel shows. `show` is false when there is no address to name (the section hides). `key` is null until a verdict
- * is known; the panel plays again when it changes. `at` (epoch ms) stamps the log line only for a live check. `before`
- * (the Swap's `state.before`, or null) is the other build that ran at this address: the same call on it is shown as the contrast.
+ * What the panel shows: always two beats, whatever the live state. Today the fixed code is ALLOWED; then the owner swaps the
+ * code at the same address and the guard REFUSES. Each beat is the live verdict when the code live right now has that decision
+ * and the recorded one otherwise, and says which (`source`). `show` is false when there is no address to name (the section
+ * hides). `key` is null until a verdict is known; the panel plays again when it changes. `at` (epoch ms) stamps the log line
+ * only for a live check. `today` is null when no verdict can be shown for it; `swapped` is null when no refusal is on record
+ * and the live code is not one (the panel then shows today alone and claims nothing more).
  */
-export function agentScript({ mode, address, verdict, codeHash, at, step = 0, before = null }) {
+export function agentScript({ mode, address, verdict, codeHash, at, recorded = null }) {
   if (!address) return { show: false, key: null };
   const call = `${address}.${CALL.method} with ${CALL.label}`;
   if (!['live', 'recorded'].includes(mode) || !verdict || !codeHash) return { show: true, key: null, address, call };
-  const entry = guardEntry({ contract: address, method: CALL.method, deposit: CALL.deposit, codeHash, verdict, at: mode === 'live' ? at : null });
-  return {
-    show: true,
-    key: `${mode}|${address}|${codeHash}|${verdict.decision}|${step}|${before?.codeHash ?? ''}`,
-    address,
-    call,
-    codeHash,
-    verdict: verdictText(verdict),
-    plain: plainCheck(verdict),
-    outcome: verdict.decision === 'BLOCK' ? { ...OUTCOME.BLOCK, line: `${OUTCOME.BLOCK.line} ${harm(verdict)}` } : OUTCOME[verdict.decision],
-    log: JSON.stringify(entry, null, 2),
-    note: NOTE[mode],
-    contrast: before && contrast(before),
+  const live = mode === 'live' ? { source: 'live', verdict, codeHash } : null;
+  const recordedBeat = (decision) => { const step = recordedStep(recorded, decision); return step && { source: 'recorded', verdict: step, codeHash: step.codeHash }; };
+  const beat = (decision) => (live?.verdict.decision === decision ? live : recordedBeat(decision));
+  const fixed = beat('ALLOW') ?? live;
+  const bad = beat('BLOCK');
+  const today = fixed && {
+    source: fixed.source, hash: fixed.codeHash, verdict: verdictText(fixed.verdict), word: OUTCOME[fixed.verdict.decision].word, tone: OUTCOME[fixed.verdict.decision].tone,
+    when: fixed.verdict.decision === 'ALLOW' ? 'Today: fixed code.' : 'Today: no verdict for this code.',
+    line: fixed.verdict.decision === 'ALLOW' ? OUTCOME.ALLOW.line : 'The guard asks a human first, and nobody is here.',
   };
+  const swapped = bad && {
+    ...OUTCOME.BLOCK, source: bad.source, hash: bad.codeHash, verdict: verdictText(bad.verdict), why: harm(bad.verdict),
+    log: JSON.stringify(guardEntry({ contract: address, method: CALL.method, deposit: CALL.deposit, codeHash: bad.codeHash, verdict: bad.verdict, at: bad.source === 'live' ? at : null }), null, 2),
+    note: `${NOTE[bad.source]}${bad.source === 'recorded' && live && live.verdict.decision !== 'ALLOW' ? ' A live check of the code deployed right now would decline it (a Warn, or no verdict).' : ''}`,
+  };
+  return { show: true, key: `${mode}|${address}|${today?.source}:${today?.hash}|${swapped?.source}:${swapped?.hash}`, address, call, today, swapped };
 }
 
 /**
@@ -77,8 +73,9 @@ const BEAT_MS = 400;
 const ROWS = ['task', 'page', 'call', 'check', 'out'];
 const AGENT_ROWS = 3;
 export const AGENT_IDS = {
-  section: 'swap-agent', replay: 'agent-replay', inject: 'agent-inject', call: 'agent-call', hash: 'agent-hash', verdict: 'agent-verdict', plain: 'agent-plain',
-  out: 'agent-out', contrast: 'agent-contrast', contrastWord: 'agent-contrast-word', contrastLine: 'agent-contrast-line', contrastHash: 'agent-contrast-hash', word: 'agent-word', line: 'agent-line', log: 'agent-log', note: 'agent-note',
+  section: 'swap-agent', replay: 'agent-replay', inject: 'agent-inject', call: 'agent-call',
+  todayWord: 'agent-today-word', todaySrc: 'agent-today-src', todayHash: 'agent-today-hash', todayVerdict: 'agent-today-verdict', todayLine: 'agent-today-line',
+  out: 'agent-out', src: 'agent-src', word: 'agent-word', line: 'agent-line', why: 'agent-why', hash: 'agent-hash', verdict: 'agent-verdict', log: 'agent-log', note: 'agent-note',
   ...Object.fromEntries(ROWS.map((row) => [`row-${row}`, `agent-row-${row}`])),
 };
 
@@ -113,28 +110,38 @@ export function mountAgent(doc, { calm = false, now = () => Date.now(), schedule
     for (let i = 0; i < AGENT_ROWS; i++) reveal(i, ROW_DELAYS[i], 'agent');
   }
 
+  const paintSource = (el, source, text) => { el.textContent = SOURCE[source]; el.setAttribute('data-source', source); el.setAttribute('title', text); };
+  const paintHash = (el, hash) => { el.textContent = hash; el.setAttribute('title', hash); };
+  function paintToday(today) {
+    if (!today) return;
+    els.todayWord.textContent = today.word;
+    els.todayWord.setAttribute('data-tone', today.tone);
+    els.todayLine.textContent = today.line;
+    els.todayVerdict.textContent = today.verdict;
+    paintHash(els.todayHash, today.hash);
+    paintSource(els.todaySrc, today.source, today.source === 'live' ? 'Read from the chain just now.' : 'The registry\'s verdict for the fixed build, from a recorded testnet run. Not a live check.');
+  }
+  function paintSwapped(swapped) {
+    els.out.setAttribute('data-tone', swapped.tone);
+    els.word.textContent = swapped.word;
+    els.line.textContent = swapped.line;
+    els.why.textContent = swapped.why;
+    els.verdict.textContent = swapped.verdict;
+    paintHash(els.hash, swapped.hash);
+    els.log.textContent = swapped.log;
+    els.note.textContent = swapped.note;
+    paintSource(els.src, swapped.source, swapped.source === 'live' ? 'Read from the chain just now.' : 'The registry\'s verdict for the vulnerable build, from a recorded testnet run. Not a live check.');
+  }
+
   function playVerdict(script) {
     // Not yet read: the rows stay hidden. Read already, or read late: keep the pace the script has, but never skip the beat.
     stop(['verdict']);
     for (let i = AGENT_ROWS; i < rows.length; i++) setRow(i, false);
     if (script.key === null) return;
-    els.hash.textContent = script.codeHash;
-    els.hash.setAttribute('title', script.codeHash);
-    els.verdict.textContent = script.verdict;
-    els.plain.textContent = script.plain;
-    els.out.setAttribute('data-tone', script.outcome.tone);
-    els.word.textContent = script.outcome.word;
-    els.line.textContent = script.outcome.line;
-    els.log.textContent = script.log;
-    els.note.textContent = script.note;
-    els.contrast.hidden = !script.contrast;
-    if (script.contrast) {
-      els.contrast.setAttribute('data-tone', script.contrast.tone);
-      els.contrastWord.textContent = script.contrast.word;
-      els.contrastLine.textContent = script.contrast.line;
-      els.contrastHash.textContent = script.contrast.hash;
-      els.contrastHash.setAttribute('title', script.contrast.hash);
-    }
+    paintToday(script.today);
+    rows[AGENT_ROWS].hidden = !script.today;
+    rows[AGENT_ROWS + 1].hidden = !script.swapped;
+    if (script.swapped) paintSwapped(script.swapped);
     const first = Math.max(ROW_DELAYS[AGENT_ROWS] - (now() - startedAt), BEAT_MS);
     reveal(AGENT_ROWS, first, 'verdict');
     reveal(AGENT_ROWS + 1, first + ROW_DELAYS[AGENT_ROWS + 1] - ROW_DELAYS[AGENT_ROWS], 'verdict');

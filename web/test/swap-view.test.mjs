@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSwap, parseRecorded } from '../src/swap.js';
-import { IDS as PAGE_IDS, mountSwap, paint, paintRob, ROB_IDS, robViewModel, viewModel } from '../src/swap-view.js';
+import { IDS as PAGE_IDS, mountSwap, paint, paintRob, ROB_IDS, robViewModel, viewModel, withPreview } from '../src/swap-view.js';
 import { fakeDocument, walk } from './fake-dom.mjs';
 import { CONFIG, fakeChain, flipTxResult, HASH, recordedJson, UNSET_CONFIG } from './swap-chain.mjs';
 
@@ -120,7 +120,7 @@ test('recorded because the demo key can no longer pay, or because nothing is con
 test('empty and loading: no verdict word is invented, and the button is off', () => {
   const swap = createSwap({ config: UNSET_CONFIG, recorded: null });
   const loading = view(swap.getState());
-  assert.deepEqual([loading.status.tone, loading.pf.tone, loading.pf.word, loading.pf.hash, loading.button.disabled], ['loading', 'none', '...', '', true]);
+  assert.deepEqual([loading.status.tone, loading.pf.tone, loading.pf.word, loading.pf.hash, loading.button.disabled], ['loading', 'none', '', '', true]);
   const empty = view({ ...swap.getState(), mode: 'empty', reason: 'unconfigured' });
   assert.deepEqual([empty.pf.word, empty.trust.word, empty.address, empty.button.disabled, empty.addressHref], ['No data', 'No data', 'no address yet', true, null]);
   assert.match(empty.status.text, /no recording is bundled/);
@@ -128,10 +128,11 @@ test('empty and loading: no verdict word is invented, and the button is off', ()
 
 // ---- paint ---------------------------------------------------------------------------------------------------------
 
-const IDS = ['status', 'detail', 'source', 'address', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfTech', 'pfBuild', 'pfHash', 'before', 'beforeTitle', 'beforeWord', 'beforeRules', 'beforeReason', 'beforeHash', 'beforeTx', 'pin', 'pinThen', 'pinNow', 'pinFoldThen', 'pinFoldNow', 'pinKeys', 'button', 'hint', 'flips', 'tx'];
+const IDS = ['status', 'detail', 'source', 'cards', 'keys', 'pfTag', 'pfPreview', 'pfPreviewPill', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfTech', 'pfBuild', 'pfHash', 'before', 'beforeTitle', 'beforeWord', 'beforeRules', 'beforeReason', 'beforeHash', 'beforeTx', 'pin', 'pinThen', 'pinNow', 'pinFoldThen', 'pinFoldNow', 'pinKeys', 'button', 'hint', 'flips', 'tx'];
 function fakeSection() {
   const doc = fakeDocument();
   const els = Object.fromEntries(IDS.map((name) => [name, Object.assign(doc.createElement('div'), { textContent: '' })]));
+  els.address = [doc.createElement('code'), doc.createElement('code')]; // the address is said in each card's header
   return { doc, els };
 }
 
@@ -144,8 +145,8 @@ test('paint writes every field as text and links only with a validated href', as
   assert.equal(els.status.attrs['data-tone'], 'live');
   assert.equal(els.button.disabled, false);
   const links = [];
-  for (const name of ['address', 'tx']) walk(els[name], (n) => { if (n.tag === 'a') links.push(n.attrs); });
-  assert.deepEqual(links.map((l) => l.href), [`${EXPLORER}/account/chameleon.example.testnet`, `${EXPLORER}/tx/${HASH.patched}`]);
+  for (const el of [...els.address, els.tx]) walk(el, (n) => { if (n.tag === 'a') links.push(n.attrs); });
+  assert.deepEqual(links.map((l) => l.href), [`${EXPLORER}/account/chameleon.example.testnet`, `${EXPLORER}/account/chameleon.example.testnet`, `${EXPLORER}/tx/${HASH.patched}`]);
   assert.ok(links.every((l) => l.rel === 'noopener noreferrer' && l.target === '_blank'));
 });
 
@@ -183,6 +184,7 @@ test('mountSwap reads nothing while the tab is hidden, reads at once when it is 
   const listeners = {};
   doc.getElementById = (id) => { if (!els.has(id)) els.set(id, Object.assign(doc.createElement('div'), { textContent: '' })); return els.get(id); };
   doc.addEventListener = (type, fn) => { listeners[type] = fn; };
+  doc.querySelectorAll = () => [doc.getElementById('swap-address-a'), doc.getElementById('swap-address-b')];
   doc.hidden = true;
   const saved = Object.fromEntries(['document', 'fetch', 'matchMedia', 'setInterval'].map((name) => [name, globalThis[name]]));
   Object.assign(globalThis, {
@@ -196,7 +198,7 @@ test('mountSwap reads nothing while the tab is hidden, reads at once when it is 
     assert.equal(chain.calls.length, 0, 'hidden: no request');
     doc.hidden = false;
     listeners.visibilitychange();
-    for (const until = Date.now() + 5000; Date.now() < until && els.get('pf-word').textContent === '...';) await new Promise((resolve) => setImmediate(resolve)); // time, not turns: the hash is computed off the main thread
+    for (const until = Date.now() + 5000; Date.now() < until && els.get('pf-word').textContent === '';) await new Promise((resolve) => setImmediate(resolve)); // time, not turns: the hash is computed off the main thread
     assert.ok(chain.calls.length > 0, 'shown: it reads at once');
     assert.equal(els.get('pf-word').textContent, 'BLOCK');
     assert.equal(els.get('agent-word').textContent, 'REFUSED', 'the agent panel plays on the same read');
@@ -351,11 +353,55 @@ test('through real swaps from the fixed build: the note shows after the bad code
   }
 });
 
+test('the first screen holds its shape while it loads: the button already has its final label, the verdict word is a skeleton, and the allowlist already says ALLOW', () => {
+  const loading = view(createSwap({ config: CONFIG, recorded: null }).getState());
+  assert.deepEqual([loading.button.label, loading.button.disabled, loading.loading, loading.pf.word, loading.trust.word], ['Swap in the bad code', true, true, '', 'ALLOW']);
+  assert.equal(view({ ...createSwap({ config: CONFIG, recorded }).getState(), mode: 'recorded', reason: 'rpc-down' }).loading, false);
+});
+
+test('the safe verdict shows a green "PF001 check: clear" chip; a found rule shows its id; no verdict shows no chip', async () => {
+  const safe = view((await liveState('patched')).state).pf.tag;
+  assert.deepEqual(safe, { text: 'PF001 check: clear', state: 'clear' });
+  assert.deepEqual(view((await liveState('vulnerable')).state).pf.tag, { text: 'PF001', state: 'found' });
+  assert.equal(view((await liveState('vulnerable', (chain) => { delete chain.verdicts[HASH.vulnerable]; })).state).pf.tag.text, '');
+  const { doc, els } = fakeSection();
+  paint(doc, els, view((await liveState('patched')).state));
+  assert.deepEqual([els.pfTag.textContent, els.pfTag.attrs['data-state'], els.pfTag.hidden], ['PF001 check: clear', 'clear', false]);
+});
+
+test('one line says there are no admin keys and how many times the code changed, from the live count', async () => {
+  assert.equal(view((await liveState('patched')).state).keys, 'No admin keys, and its code still changed 3 times.');
+  assert.equal(view({ ...(await liveState('patched')).state, flips: 1 }).keys, 'No admin keys, and its code still changed 1 time.');
+  assert.equal(view({ ...(await liveState('patched')).state, flips: null }).keys, 'No admin keys, and its code still changes.');
+  assert.equal(view({ ...createSwap({ config: CONFIG, recorded }).getState(), mode: 'recorded', reason: 'rpc-down' }).keys, 'No admin keys, and its code still changes.', 'a recording claims no live count');
+});
+
+test('the preview is offered only on the fixed code, with a recorded bad build to show, and every stage is labelled', async () => {
+  const safe = view((await liveState('patched')).state);
+  assert.equal(safe.preview.hash, HASH.patched);
+  assert.deepEqual([safe.preview.bad.word, safe.preview.bad.tone, safe.preview.bad.hash, safe.preview.bad.rules], ['BLOCK', 'block', 'FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i', 'PF001']);
+  assert.equal(safe.previewNote, '', 'the live model alone is never labelled a preview');
+  assert.equal(view((await liveState('vulnerable')).state).preview, null);
+  assert.equal(view({ ...(await liveState('patched')).state, recorded: null }).preview, null, 'no recording, no preview: nothing is invented');
+  assert.equal(view({ ...(await liveState('patched')).state, mode: 'recorded', reason: 'rpc-down' }).preview, null);
+  const stages = Object.fromEntries(['safe', 'swap', 'bad', 'still'].map((stage) => [stage, withPreview(safe, stage)]));
+  assert.ok(Object.values(stages).every((m) => m.previewNote.startsWith('Preview.')));
+  assert.deepEqual([stages.safe.pf.word, stages.swap.pf.word, stages.swap.pf.hash, stages.bad.pf.word, stages.still.pf.word], ['ALLOW', 'ALLOW', safe.preview.bad.hash, 'BLOCK', 'ALLOW']);
+  assert.equal(stages.bad.trust.word, 'ALLOW', 'the allowlist card never changes');
+  assert.equal(stages.bad.agent, safe.agent, 'nor does the agent');
+  assert.equal(withPreview(safe, null), safe);
+  const { doc, els } = fakeSection();
+  paint(doc, els, stages.bad);
+  assert.deepEqual([els.pfPreview.hidden, els.pfPreviewPill.hidden, els.pfCard.attrs['data-preview'], els.pfWord.textContent], [false, false, 'on', 'BLOCK']);
+  paint(doc, els, safe);
+  assert.deepEqual([els.pfPreview.hidden, els.pfPreviewPill.hidden, els.pfCard.attrs['data-preview']], [true, true, 'off']);
+});
+
 test('the first screen: on the fixed build it invites the owner\'s swap, and shows no history; on the bad build left by someone else it still tells the story', async () => {
   const landing = view({ ...(await fixedLive(11)).state, arrival: HASH.patched }, 0);
   assert.deepEqual([landing.trust.word, landing.pf.word, landing.before, landing.pin], ['ALLOW', 'ALLOW', null, null], 'both checks say ALLOW and nothing speaks of an earlier build');
   assert.equal(landing.button.label, 'Swap in the bad code');
-  assert.match(landing.hint, /^Right now this contract is fine, and both checks say yes\. A contract's owner can swap its code at any time\./);
+  assert.equal(landing.hint, '', 'the button, the preview and the status line say it: no second sentence to read');
   assert.equal(landing.trust.note, 'This address is on its safe list, so it says yes. Every time.');
   const swapped = view({ ...(await liveState('vulnerable')).state, arrival: HASH.patched });
   assert.match(swapped.hint, /^Same address, new code\. The address check cannot tell/);

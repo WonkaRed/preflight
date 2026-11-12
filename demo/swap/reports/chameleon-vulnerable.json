@@ -23,7 +23,7 @@
       "title": "Callback not marked #[private]",
       "severity": "high",
       "file": "src/lib.rs",
-      "line": 66,
+      "line": 68,
       "column": 12,
       "item": "Vault::on_deposit",
       "message": "`Vault::on_deposit` is scheduled on the contract itself with `ext(..)` but is not marked `#[private]`, so any account can call it directly",

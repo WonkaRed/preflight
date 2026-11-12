@@ -4,10 +4,29 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://test.rpc.fastnear.com https://near-testnet.drpc.org; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://test.rpc.fastnear.com https://near-testnet.drpc.org; base-uri 'none'; form-action 'none'">
 <title>Preflight: check the code, not the address</title>
 <meta name="description" content="One NEAR testnet address whose contract code flips between a vulnerable and a patched build. An allowlist by account id keeps saying allow; Preflight looks the verdict up by the hash of the deployed code. Also scans contract source in your browser.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="canonical" href="https://wonkared.github.io/preflight/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Preflight">
+<meta property="og:url" content="https://wonkared.github.io/preflight/">
+<meta property="og:title" content="The address never changes. The code does.">
+<meta property="og:description" content="AI agents pay smart contracts by their address, and the owner can swap the code behind it. An address allowlist keeps saying ALLOW. Preflight checks the code and says BLOCK. Try it live on NEAR testnet.">
+<meta property="og:image" content="https://wonkared.github.io/preflight/og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Two verdict cards for one contract address: an address allowlist says ALLOW, Preflight says BLOCK.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="The address never changes. The code does.">
+<meta name="twitter:description" content="An address allowlist says ALLOW. Preflight checks the code and says BLOCK. Try it live on NEAR testnet.">
+<meta name="twitter:image" content="https://wonkared.github.io/preflight/og.png">
+<meta name="twitter:image:alt" content="Two verdict cards for one contract address: an address allowlist says ALLOW, Preflight says BLOCK.">
+<link rel="preload" href="inter-tight-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="jetbrains-mono-400.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="jetbrains-mono-700.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -35,11 +54,11 @@
     <p class="swap-lede">AI agents pay smart contracts by their address. The owner can often swap the code behind that address. Preflight checks the code, not the address.</p>
 
     <div class="swap-act">
-      <button type="button" class="btn swap-btn" id="swap-button" disabled>Swap the code</button>
+      <button type="button" class="btn swap-btn" id="swap-button" disabled>Swap in the bad code</button>
       <div class="swap-act-note">
-        <p class="swap-hint" id="swap-hint"></p>
-        <p class="swap-flips" id="swap-flips"></p>
         <p class="swap-status" id="swap-status" data-tone="loading" role="status">Reading the chain.</p>
+        <p class="swap-flips" id="swap-flips"></p>
+        <p class="swap-hint" id="swap-hint"></p>
       </div>
     </div>
     <p class="swap-tx" id="swap-tx" role="status"></p>
@@ -55,35 +74,60 @@
     </div>
 
     <div class="swap-stage">
-      <p class="swap-address"><code id="swap-address">no address yet</code></p>
-      <div class="swap-cards">
+      <div class="swap-cards" id="swap-cards" data-loading="on">
         <article class="card" id="swap-trust" data-tone="trust">
-          <h2>An address allowlist</h2>
-          <p class="card-sub">What a scoped agent key already checks</p>
-          <p class="word" id="trust-word">No data</p>
-          <p class="card-line" id="trust-note"></p>
+          <div class="card-head">
+            <div class="card-top">
+              <h2>An <span class="more">address </span>allowlist</h2>
+              <code class="addr" data-address></code>
+            </div>
+            <p class="card-sub">What a scoped agent key already checks</p>
+            <p class="word"><span id="trust-word"></span></p>
+          </div>
+          <div class="card-body" data-label="Address allowlist">
+            <p class="card-line" id="trust-note"></p>
+            <p class="looked">Looked at: the account name. Never the code.</p>
+            <p class="hashline noread"><span>Code fingerprint</span><span class="hash-none">not read</span></p>
+            <details class="tech">
+              <summary>Technical detail</summary>
+              <p>The allowlist compares the contract's account name with a list. It never fetches or hashes the code, so new code at the same name passes.</p>
+            </details>
+          </div>
         </article>
         <article class="card" id="swap-pf" data-tone="none">
-          <h2>Preflight</h2>
-          <p class="card-sub">Looks at the code that is live right now</p>
-          <p class="word"><span id="pf-word">...</span><span class="rules" id="pf-rules"></span></p>
-          <p class="card-line" id="pf-line"></p>
-          <div class="before" id="swap-before" hidden>
-            <p class="before-title" id="before-title"></p>
-            <p class="before-said">Preflight said <b class="vw" id="before-word"></b> <span class="rules" id="before-rules"></span> for it. <span id="before-reason"></span></p>
-            <p class="before-meta"><span>Code fingerprint then</span> <button type="button" class="hash" id="before-hash" data-copy aria-label="Copy the full code fingerprint (hash) of the other code"></button> <span id="before-tx"></span></p>
+          <div class="card-head">
+            <div class="card-top">
+              <h2>Preflight</h2>
+              <span class="preview-pill" id="pf-preview-pill" hidden>Preview</span>
+              <code class="addr" data-address></code>
+            </div>
+            <p class="card-sub">Looks at the code that is live right now</p>
+            <p class="word"><span id="pf-word"></span><span class="rules" id="pf-rules"></span></p>
           </div>
-          <p class="hashline"><span title="A hash of the deployed code: change one byte and it changes.">Code fingerprint</span><button type="button" class="hash" id="pf-hash" data-copy aria-label="Copy the full code fingerprint (hash)"></button></p>
-          <details class="tech">
-            <summary>Technical detail</summary>
-            <p><span class="tag">PF001</span> <span id="pf-tech"></span></p>
-            <p>Deployed code: <span id="pf-build"></span>. The fingerprint is the SHA-256 hash of the deployed wasm; the registry stores its verdict under that hash.</p>
-          </details>
+          <div class="card-body" data-label="Preflight">
+            <p class="card-line" id="pf-line"></p>
+            <p class="preview-note" id="pf-preview" hidden></p>
+            <div class="before" id="swap-before" hidden>
+              <p class="before-title" id="before-title"></p>
+              <p class="before-said">Preflight said <b class="vw" id="before-word"></b> <span class="rules" id="before-rules"></span> for it. <span id="before-reason"></span></p>
+              <p class="before-meta"><span>Code fingerprint then</span> <button type="button" class="hash" id="before-hash" data-copy aria-label="Copy the full code fingerprint (hash) of the other code"></button> <span id="before-tx"></span></p>
+            </div>
+            <p class="hashline"><span title="A hash of the deployed code: change one byte and it changes.">Code fingerprint</span><button type="button" class="hash" id="pf-hash" data-copy aria-label="Copy the full code fingerprint (hash)"></button></p>
+            <details class="tech">
+              <summary>Technical detail</summary>
+              <p><span class="tag" id="pf-tag">PF001</span> <span id="pf-tech"></span></p>
+              <p>Deployed code: <span id="pf-build"></span>. The fingerprint is the SHA-256 hash of the deployed wasm; the registry stores its verdict under that hash.</p>
+            </details>
+          </div>
         </article>
       </div>
     </div>
 
-    <p class="swap-print">This contract holds zero full-access keys, yet its code has already changed the number of times shown above, through its own switch. Zero keys never meant fixed code; that is exactly why the fingerprint check above matters more than counting keys.</p>
+    <p class="swap-print" id="swap-keys"></p>
+    <details class="fold keys-fold">
+      <summary>Why zero keys never meant fixed code</summary>
+      <p>This contract holds zero full-access keys, yet its code has already changed the number of times shown above, through its own switch. Zero keys never meant fixed code; that is exactly why the fingerprint check above matters more than counting keys.</p>
+    </details>
 
     <div class="rob" id="swap-rob">
       <h2 class="rob-title">See the hole for yourself</h2>
@@ -128,7 +172,7 @@
       <details class="fold">
         <summary>About this simulation</summary>
         <p class="agent-note">This scripted agent is shown holding a key that can spend. My testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same.</p>
-        <p class="agent-note">It plays what happens when an agent obeys a poisoned page. The guard's registry check runs on the live reads above; the guard's spending policy is set by the agent's owner and has no default, so this script assumes one that allows this contract and 0.5 NEAR per call. A real language model was the agent in recorded testnet runs: it followed the injected page in 8 of 10. Before signing, the guard turned the 16 injected calls into 8 blocks (a registry Unsafe verdict) and 8 warns, each declined because no human was there to approve it; no transaction exists for any of the 16. <a href="https://github.com/WonkaRed/preflight#a-locally-run-model-as-the-agent">Read the recorded runs.</a></p>
+        <p class="agent-note">It plays what happens when an agent obeys a poisoned page. Each beat is labelled Live or Recorded: the guard's registry check runs on the live read above for the code live right now, and the other build's beat is its recorded registry verdict. The guard's spending policy is set by the agent's owner and has no default, so this script assumes one that allows this contract and 0.5 NEAR per call. A real language model was the agent in recorded testnet runs: it followed the injected page in 8 of 10. Before signing, the guard turned the 16 injected calls into 8 blocks (a registry Unsafe verdict) and 8 warns, each declined because no human was there to approve it; no transaction exists for any of the 16. <a href="https://github.com/WonkaRed/preflight#a-locally-run-model-as-the-agent">Read the recorded runs.</a></p>
       </details>
     </div>
     <ol class="agent-steps">
@@ -147,25 +191,21 @@
       </li>
       <li class="astep" id="agent-row-check">
         <h3>Preflight checks the code first</h3>
-        <p class="acheck plain" id="agent-plain"></p>
-        <p class="acheck tech">Code at the address now hashes to <button type="button" class="hash" id="agent-hash" data-copy aria-label="Copy the full code hash"></button></p>
-        <p class="acheck tech">Registry verdict for that hash: <b id="agent-verdict"></b></p>
+        <p class="beat"><span class="beat-when">Today: fixed code.</span> <b class="vw" data-tone="allow" id="agent-today-word"></b> <span class="src" id="agent-today-src"></span></p>
+        <p class="acheck tech"><span id="agent-today-line"></span> Code at the address hashes to <button type="button" class="hash" id="agent-today-hash" data-copy aria-label="Copy the full code hash"></button> and the registry says <b id="agent-today-verdict"></b>.</p>
       </li>
       <li class="astep" id="agent-row-out">
         <div class="card agent-out" id="agent-out" data-tone="none" role="status">
+          <p class="beat"><span class="beat-when">Owner swaps the code. Same address.</span> <span class="src" id="agent-src"></span></p>
           <p class="word" id="agent-word"></p>
           <p class="card-line" id="agent-line"></p>
           <details class="fold agent-fold">
-            <summary>The guard's decision log</summary>
+            <summary>Why, and the guard's decision log</summary>
+            <p class="agent-why" id="agent-why"></p>
+            <p class="acheck tech">Code at the address hashes to <button type="button" class="hash" id="agent-hash" data-copy aria-label="Copy the full code hash"></button> and the registry says <b id="agent-verdict"></b>.</p>
             <pre class="agent-log" id="agent-log" tabindex="0" aria-label="Decision log entry"></pre>
             <p class="card-sub" id="agent-note"></p>
           </details>
-        </div>
-        <div class="card agent-out agent-contrast" id="agent-contrast" data-tone="none" hidden>
-          <h3>The same call, before the last swap</h3>
-          <p class="word" id="agent-contrast-word"></p>
-          <p class="card-line" id="agent-contrast-line"></p>
-          <p class="hashline"><span>Code fingerprint then</span> <button type="button" class="hash" id="agent-contrast-hash" data-copy aria-label="Copy the full code fingerprint (hash) of the other code"></button></p>
         </div>
       </li>
     </ol>
@@ -208,8 +248,11 @@
     <div class="story-head">
       <h2 id="mainnet-title">On mainnet today</h2>
       <p class="story-lead">Zero full-access keys does not mean the code cannot change. A contract can replace its own code through its own logic, or through a DAO that votes on upgrades. A key count shows only one way in.</p>
-      <p class="story-sub" id="mainnet-sub">Well-known NEAR mainnet contracts, read from the chain.</p>
-      <p class="story-tech" id="mainnet-read"></p>
+      <details class="fold read-fold">
+        <summary>What was read, and how</summary>
+        <p id="mainnet-sub">Well-known NEAR mainnet contracts, read from the chain.</p>
+        <p id="mainnet-read"></p>
+      </details>
     </div>
     <div class="survey" id="mainnet-table"><p class="hint">Loading the survey.</p></div>
     <details class="fold survey-fold">
@@ -251,7 +294,7 @@
           <textarea id="source" wrap="off" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="Paste a #[near] contract here"></textarea>
           <div class="actions">
             <button type="button" class="btn" id="scan-source" disabled>Scan source</button>
-            <span class="hint">Ctrl or Cmd + Enter also scans. Edit the example and scan again.</span>
+            <span class="hint"><span class="kbd-hint">Ctrl or Cmd + Enter also scans. </span>Edit the example and scan again.</span>
           </div>
         </div>
 

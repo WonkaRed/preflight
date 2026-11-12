@@ -35,9 +35,17 @@ test('everything the page loads is in dist, and nothing is loaded from elsewhere
   assert.match(csp, /^default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'/);
   for (const name of sources) {
     const hosts = [...read(SRC, name).matchAll(/https?:\/\/([\w.-]+)/g)].map((m) => m[1]);
-    for (const host of hosts) assert.ok(['api.github.com', 'raw.githubusercontent.com', 'github.com', 'test.rpc.fastnear.com', 'near-testnet.drpc.org', 'testnet.near.rocks'].includes(host), `${name} mentions ${host}`);
+    for (const host of hosts) assert.ok(['api.github.com', 'raw.githubusercontent.com', 'github.com', 'test.rpc.fastnear.com', 'near-testnet.drpc.org', 'testnet.near.rocks', 'wonkared.github.io'].includes(host), `${name} mentions ${host}`);
   }
-  assert.doesNotMatch(read(SRC, 'style.css'), /@import|url\(/);
+  // The page's own address appears only where a link preview reads it: the canonical link and the og:/twitter: tags, never a load.
+  const own = html.split('\n').filter((line) => line.includes('wonkared.github.io'));
+  assert.ok(own.length > 0 && own.every((line) => /^<(link rel="canonical"|meta (property="og:|name="twitter:))/.test(line)), 'wonkared.github.io only in canonical/og/twitter tags');
+  const css = read(SRC, 'style.css');
+  assert.doesNotMatch(css, /@import/);
+  assert.equal(csp.match(/font-src ([^;]+);/)[1], "'self'", 'fonts come from this origin only');
+  const fontUrls = [...css.matchAll(/url\(([^)]*)\)/g)].map((m) => m[1]);
+  assert.ok(fontUrls.length > 0 && fontUrls.every((url) => /^[\w-]+\.woff2$/.test(url) && present.includes(url)), 'the only url() in the CSS is a font file shipped in dist');
+  assert.ok(css.split('\n').filter((line) => line.includes('url(')).every((line) => line.startsWith('@font-face')), 'and it sits in an @font-face rule');
 });
 
 test('no markup sinks, no inline script or style, no event-handler attributes', () => {
@@ -112,14 +120,14 @@ test('the agent panel says plainly that it is scripted, sends nothing, and links
   assert.match(html, /id="swap-title"><span>The address never changes\.<\/span> <span>The code does\.<\/span><\/h1>\s*<p class="swap-lede">AI agents pay smart contracts by their address\. The owner can often swap the code behind that address\. Preflight checks the code, not the address\./);
   assert.match(html, /This scripted agent is shown holding a key that can spend\. My testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same\./);
   // The first screen is plain words; the technical wording stays reachable.
-  assert.match(html, /<h2>An address allowlist<\/h2>\s*<p class="card-sub">What a scoped agent key already checks<\/p>/);
+  assert.match(html, /<h2>An <span class="more">address <\/span>allowlist<\/h2>[\s\S]*?<p class="card-sub">What a scoped agent key already checks<\/p>/);
   assert.match(html, /<p class="card-sub">Looks at the code that is live right now<\/p>/);
   assert.match(html, /<span[^>]*>Code fingerprint<\/span><button type="button" class="hash" id="pf-hash"/);
   assert.match(html, /The left card is a real baseline, not a strawman: an address allowlist is what agent wallets and NEAR function-call keys scoped to one contract already give you\. It is not a model of any particular wallet or agent\./);
   for (const caption of ["The agent's job", 'It reads a web page', 'The agent is about to pay', 'Preflight checks the code first']) assert.match(html, new RegExp(`<h3>${caption}</h3>`));
   assert.match(html, /<b>The page hides an order\.<\/b>/);
-  assert.match(html, /Registry verdict for that hash: <b id="agent-verdict">/);
-  assert.match(html, /<details class="tech">\s*<summary>Technical detail<\/summary>\s*<p><span class="tag">PF001<\/span> <span id="pf-tech">/);
+  assert.match(html, /and the registry says <b id="agent-verdict">/);
+  assert.match(html, /<details class="tech">\s*<summary>Technical detail<\/summary>\s*<p><span class="tag" id="pf-tag">PF001<\/span> <span id="pf-tech">/);
   assert.match(html, /<p class="swap-hint" id="swap-hint">/);
   assert.doesNotMatch(read(SRC, 'swap-agent.js'), /fetch\(|sendBeacon|XMLHttpRequest|WebSocket|signTransaction|send_tx/, 'the panel makes no request and signs nothing');
 });

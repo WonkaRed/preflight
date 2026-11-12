@@ -1,5 +1,9 @@
 /* Preflight: one address, two checks. Red and green mean a verdict and nothing else; the one brand colour is the blue of
-   things you can press. Display type is the system's heaviest sans, prose is the same sans, hashes and code are mono. */
+   things you can press. Display type is Inter Tight 800, prose is the system sans, hashes and code are JetBrains Mono. */
+/* Self-hosted, same origin (the CSP's font-src 'self'): Inter Tight 800 for headlines and the verdict words, JetBrains Mono for hashes and addresses. Latin subsets, SIL OFL (fonts-OFL.txt). */
+@font-face { font-family: "Inter Tight"; font-weight: 800; font-style: normal; font-display: optional; src: url(inter-tight-800.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 400; font-style: normal; font-display: optional; src: url(jetbrains-mono-400.woff2) format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-weight: 700; font-style: normal; font-display: optional; src: url(jetbrains-mono-700.woff2) format("woff2"); }
 :root {
   --bg: #eef1f6;
   --surface: #ffffff;
@@ -24,7 +28,8 @@
   --allow-bg:   #1c5a37;  --allow-fg:   #ffffff;  --allow-edge:   #12402a;
 
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --display: "Inter Tight", var(--sans);
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, "Liberation Mono", monospace;
   --radius: 14px;
 }
 @media (prefers-color-scheme: dark) {
@@ -77,7 +82,7 @@ a { color: var(--focus); }
 .top { padding-block: 1rem 0; }
 .bar { width: min(74rem, 100% - 2.5rem); margin-inline: auto; display: flex; align-items: center; gap: 0.5rem 1rem; }
 .brand { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--ink); text-decoration: none; }
-.brand b { font: 800 1.3rem/1 var(--sans); letter-spacing: -0.03em; }
+.brand b { font: 800 1.3rem/1 var(--display); letter-spacing: 0; }
 .logo { width: 1.9rem; height: 1.9rem; }
 .logo rect { fill: var(--ink); }
 .logo path { fill: none; stroke: var(--bg); stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; }
@@ -85,9 +90,14 @@ a { color: var(--focus); }
 .nav { margin-left: auto; display: flex; gap: 0.25rem 1.4rem; }
 .nav a { color: var(--ink); text-decoration: none; font-weight: 600; font-size: 0.95rem; padding-block: 0.3rem; border-bottom: 2px solid transparent; }
 .nav a:hover { border-bottom-color: var(--ink); }
+/* A phone: the section links drop to their own row under the brand, so the page can still be navigated. */
 @media (max-width: 44rem) {
-  .rule-count, .nav a:not(:last-child) { display: none; }
+  .rule-count { display: none; }
+  .bar { flex-wrap: wrap; row-gap: 0.1rem; }
+  .nav { flex: 1 1 100%; margin-left: 0; gap: 0.25rem 1.1rem; }
+  .nav a { font-size: 0.88rem; padding-block: 0.15rem; }
 }
+@media (hover: none) { .kbd-hint { display: none; } }
 
 /* Verdict (a scan's result) */
 .verdict {
@@ -101,7 +111,7 @@ a { color: var(--focus); }
 .vtarget { margin: 0 0 1.2rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem 0.8rem; font-size: 1rem; }
 .vtarget code { font-size: 1rem; overflow-wrap: anywhere; }
 .chip { font-size: 0.8rem; padding: 0.1rem 0.55rem; border: 1px solid currentColor; border-radius: 99px; opacity: 0.85; white-space: nowrap; }
-.vhead { margin: 0; font: 800 clamp(2rem, 5.5vw, 3.2rem)/1.02 var(--sans); letter-spacing: -0.035em; overflow-wrap: anywhere; }
+.vhead { margin: 0; font: 800 clamp(2rem, 5.5vw, 3.2rem)/1.02 var(--display); letter-spacing: -0.005em; overflow-wrap: anywhere; }
 .vdetail { margin: 0.8rem 0 0; max-width: 40rem; font: 1.08rem/1.5 var(--sans); }
 .meta { margin: 1.5rem 0 0; padding-top: 1rem; border-top: 1px solid color-mix(in srgb, currentColor 30%, transparent); display: flex; flex-wrap: wrap; gap: 0.6rem 2.5rem; }
 .meta div { min-width: 0; }
@@ -150,7 +160,7 @@ a { color: var(--focus); }
 
 /* Errors */
 .problem { border: 1px solid var(--critical); border-left-width: 6px; background: var(--surface); border-radius: 10px; padding: 1.4rem 1.5rem; }
-.problem h2 { margin: 0 0 0.4rem; font: 800 clamp(1.5rem, 5vw, 2.1rem)/1.1 var(--sans); letter-spacing: -0.03em; color: var(--critical); }
+.problem h2 { margin: 0 0 0.4rem; font: 800 clamp(1.5rem, 5vw, 2.1rem)/1.1 var(--display); letter-spacing: 0; color: var(--critical); }
 .problem p { margin: 0.4rem 0; }
 .problem ul { margin: 0.6rem 0; padding-left: 1.2rem; }
 .problem li { margin: 0.3rem 0; overflow-wrap: anywhere; }
@@ -168,19 +178,21 @@ a { color: var(--focus); }
 
 /* The Swap: one address, two checks. The left card never changes; the right card is the page's one moving part. */
 .swap { padding-block: clamp(1rem, 3.5vh, 2.5rem) 1rem; }
-.swap h1 { margin: 0; font: 800 clamp(2.35rem, 6.3vw, 4.6rem)/0.98 var(--sans); letter-spacing: -0.05em; }
+.swap h1 { margin: 0; font: 800 clamp(2.35rem, 6.3vw, 4.6rem)/0.98 var(--display); letter-spacing: -0.02em; }
 .swap h1 span { display: block; }
 .swap h1 span:first-child { color: var(--muted); }
 .swap-lede { margin: 0.8rem 0 0; max-width: 56rem; font: 400 clamp(1.12rem, 1.8vw, 1.35rem)/1.4 var(--sans); }
 .swap-act { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem 1.25rem; margin-top: 1.1rem; }
-.swap-act-note { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.swap-hint { margin: 0; font-size: 1.05rem; font-weight: 600; }
+.swap-act-note { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.9rem; min-width: 0; min-height: 1.5rem; color: var(--muted); font-size: 0.95rem; }
+.swap-hint { margin: 0; }
 .swap-hint:empty { display: none; }
+/* Where the loaded note wraps under the button, the row keeps its two lines from the first paint. */
+@media (min-width: 44rem) and (max-width: 60rem) { .swap-act { min-height: 5.5rem; } }
 .swap-btn { min-height: 3.4rem; padding: 0.8rem 2rem; border: 0; border-radius: 99px; background: var(--brand); color: var(--brand-fg); font-size: 1.15rem; font-weight: 700; letter-spacing: -0.01em; }
 .swap-btn:disabled { cursor: not-allowed; }
-.swap-flips { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.swap-flips { margin: 0; font-variant-numeric: tabular-nums; }
 .swap-flips:empty { display: none; }
-.swap-status { margin: 0; color: var(--muted); font-size: 0.92rem; }
+.swap-status { margin: 0; }
 .swap-status[data-tone=recorded], .swap-status[data-tone=empty] { padding: 0.45rem 0.85rem; max-width: 46rem; color: var(--ink); background: var(--warning-tint); border: 1px solid var(--warning-edge); border-left-width: 5px; border-radius: 8px; }
 .swap-status[data-tone=live]::before { content: ""; display: inline-block; width: 0.55rem; height: 0.55rem; margin-right: 0.5rem; border-radius: 50%; background: var(--allow-edge); }
 .swap-tx { margin: 0.6rem 0 0; color: var(--muted); overflow-wrap: anywhere; }
@@ -189,22 +201,41 @@ a { color: var(--focus); }
 .swap-detail { margin: 0.4rem 0 0; color: var(--muted); font: 0.82rem/1.4 var(--mono); overflow-wrap: anywhere; }
 .swap-detail:empty { display: none; }
 
-.swap-stage { margin-top: 1.4rem; }
-.swap-address { margin: 0 0 0.75rem; }
-.swap-address code { display: block; width: max-content; max-width: 100%; padding: 0.4rem 1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 99px; font-size: clamp(0.95rem, 0.5rem + 2.4vw, 1.3rem); font-weight: 600; letter-spacing: -0.02em; overflow-wrap: anywhere; }
-.swap-address a { color: inherit; text-decoration: none; }
-.swap-address a:hover { text-decoration: underline; }
+.swap-stage { margin-top: 1.2rem; }
 .swap-cards { display: grid; gap: 0.9rem; }
 @media (min-width: 44rem) { .swap-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; } }
 
-.card { --c-bg: var(--surface); --c-fg: var(--ink); --c-edge: var(--line); --c-sub: var(--muted); display: flex; flex-direction: column; padding: clamp(1.1rem, 3vw, 1.5rem); background: var(--c-bg); color: var(--c-fg); border: 1px solid var(--c-edge); border-radius: 20px; }
+.card { --c-bg: var(--surface); --c-fg: var(--ink); --c-edge: var(--line); --c-sub: var(--muted); --c-img: none; display: flex; flex-direction: column; padding: clamp(1.1rem, 3vw, 1.5rem); background: var(--c-bg) var(--c-img); color: var(--c-fg); border: 1px solid var(--c-edge); border-radius: 20px; }
+/* The verdict flip is a transform animation; on its own layer it never counts as layout movement. */
+#swap-pf { will-change: transform; }
+/* Inter Tight's word space is tight at display weight. */
+.brand b, .swap h1, .card h2, .story-head h2, .rob-title, .step h3, .vhead, .problem h2 { word-spacing: 0.07em; }
 .card[data-tone=trust] { --c-bg: var(--surface); }
-.card[data-tone=block] { --c-bg: var(--severe-bg); --c-fg: var(--severe-fg); --c-edge: var(--severe-edge); --c-sub: color-mix(in srgb, var(--severe-fg) 80%, transparent); background-image: repeating-linear-gradient(135deg, transparent 0 16px, rgb(255 255 255 / 0.06) 16px 32px); }
+.card[data-tone=block] { --c-bg: var(--severe-bg); --c-fg: var(--severe-fg); --c-edge: var(--severe-edge); --c-sub: color-mix(in srgb, var(--severe-fg) 80%, transparent); --c-img: repeating-linear-gradient(135deg, transparent 0 16px, rgb(255 255 255 / 0.06) 16px 32px); }
 .card[data-tone=allow] { --c-bg: var(--allow-bg); --c-fg: var(--allow-fg); --c-edge: var(--allow-edge); --c-sub: color-mix(in srgb, var(--allow-fg) 80%, transparent); }
 .card[data-tone=warn] { --c-bg: var(--warning-bg); --c-fg: var(--warning-fg); --c-edge: var(--warning-edge); --c-sub: color-mix(in srgb, var(--warning-fg) 78%, transparent); }
-.card h2 { margin: 0; font: 800 1.15rem/1.2 var(--sans); letter-spacing: -0.02em; }
+.card h2 { margin: 0; font: 800 1.15rem/1.2 var(--display); letter-spacing: 0; }
+.card-body { display: flex; flex-direction: column; flex: 1; }
+/* The account every check is about, in each card's header: the one address, said twice, because both checks are about it. */
+.card-top { display: flex; flex-wrap: wrap; align-items: center; gap: 0.35rem 0.7rem; }
+.addr { margin-left: auto; max-width: 100%; padding: 0.15rem 0.7rem; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); border-radius: 99px; font: 600 0.82rem/1.5 var(--mono); letter-spacing: -0.01em; overflow-wrap: anywhere; }
+/* Before the address is written in, the chip keeps its line and its width, so the header wraps the same way once it is. */
+.swap-cards[data-loading=on] .addr:empty::before { content: "\200b"; }
+@media (min-width: 44rem) { .swap-cards[data-loading=on] .addr:empty { min-width: 17.5rem; } }
+.addr a { color: inherit; text-decoration: none; }
+.addr a:hover { text-decoration: underline; }
+.looked { margin: 0.5rem 0 0; color: var(--c-sub); font-size: 0.9rem; line-height: 1.4; }
+.hash-none { padding: 0.1em 0.5em; border: 1px dashed color-mix(in srgb, currentColor 45%, transparent); border-radius: 5px; font: 0.85em/1.5 var(--mono); }
+/* The preview is never live: it says so in the header, in a line under the verdict, and with a dashed edge. */
+.preview-pill { padding: 0.1rem 0.6rem; border: 1.5px dashed currentColor; border-radius: 99px; font: 700 0.78rem/1.4 var(--sans); }
+.preview-note { margin: 0.5rem 0 0; color: var(--c-sub); font-size: 0.9rem; line-height: 1.4; }
+/* The three stages' notes keep their lines, so the loop moves nothing: two lines, or one where the card is wide enough for the longest. */
+.card[data-preview=on] .preview-note { min-height: 2.8em; }
+@media (min-width: 75rem) { .card[data-preview=on] .preview-note { min-height: 1.4em; } }
+@media (min-width: 44rem) and (max-width: 74.99rem) { .card[data-preview=on] .card-line { min-height: 4.4em; } }
+.card[data-preview=on] { border-style: dashed; border-width: 2px; }
 .card-sub { margin: 0.2rem 0 0; color: var(--c-sub); font-size: 0.88rem; line-height: 1.4; }
-.word { margin: 0.6rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.9rem; font: 800 clamp(3rem, 8vw, 5rem)/0.95 var(--sans); letter-spacing: -0.05em; }
+.word { margin: 0.6rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.9rem; font: 800 clamp(3rem, 8vw, 5rem)/0.95 var(--display); letter-spacing: -0.02em; }
 .card[data-tone=trust] .word { color: var(--muted); }
 .rules { font: 700 0.95rem/1 var(--mono); letter-spacing: 0; padding: 0.3rem 0.55rem; border: 1.5px solid currentColor; border-radius: 6px; }
 .rules:empty { display: none; }
@@ -216,14 +247,17 @@ a { color: var(--focus); }
 .tech summary { cursor: pointer; padding-block: 0.5rem; font-weight: 650; }
 .tech p { margin: 0 0 0.5rem; line-height: 1.45; overflow-wrap: anywhere; }
 .tag { display: inline-block; padding: 0.05rem 0.4rem; border: 1.5px solid currentColor; border-radius: 5px; font: 700 0.75rem/1.4 var(--mono); letter-spacing: 0; vertical-align: 0.05em; }
+.tag[data-state=clear] { border-color: transparent; background: color-mix(in srgb, currentColor 22%, transparent); }
+.tag[data-state=clear]::before { content: "\2713\00a0"; }
 .swap-next { margin: 1.5rem 0 0; font-weight: 650; }
 .swap-next a { color: var(--ink); text-underline-offset: 0.25em; }
 .fine { margin-top: 1rem; color: var(--muted); font-size: 0.88rem; }
 .swap-print { margin: 0.5rem 0 0; max-width: 56rem; line-height: 1.5; }
+#swap-keys { margin-top: 1rem; font-weight: 650; }
 
 /* "Rob it": a real testnet transaction, run from this page, against whichever build is live right now. */
 .rob { margin-top: 1.5rem; padding: clamp(1rem, 3vw, 1.5rem); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
-.rob-title { margin: 0; font: 800 1.3rem/1.2 var(--sans); letter-spacing: -0.02em; }
+.rob-title { margin: 0; font: 800 1.3rem/1.2 var(--display); letter-spacing: 0; }
 .rob-lede { margin: 0.5rem 0 0; line-height: 1.5; }
 .rob-narrative { margin: 0.6rem 0 0; font-weight: 650; }
 .rob-narrative:empty { display: none; }
@@ -275,21 +309,26 @@ a { color: var(--focus); }
 .vw[data-tone=warn] { background: var(--warning-bg); color: var(--warning-fg); }
 .vw[data-tone=allow] { background: var(--allow-bg); color: var(--allow-fg); box-shadow: 0 0 0 2px #fff; }
 #swap-pf:has(.before:not([hidden])) .card-line { min-height: 0; }
-.agent-contrast { margin-top: 0.6rem; }
-.astep .agent-contrast h3 { margin: 0; color: var(--c-sub); font-size: 0.95rem; }
-.agent-contrast .word { font-size: clamp(1.8rem, 6vw, 2.8rem); margin-top: 0.3rem; }
 
-/* A phone: the button and both verdicts have to share the first screen, so the cards go compact. */
+/* While the first read is under way the verdict words are grey bars that hold the words' room, so nothing moves when they arrive. */
+.word { min-height: 0.95em; }
+/* The grey bar is the word's own box (its line height, so the card holds the same height), and the cards keep the height a loaded verdict takes. */
+.swap-cards[data-loading=on] { min-height: 26.5rem; }
+@media (min-width: 75rem) { .swap-cards[data-loading=on] { min-height: 22.8rem; } }
+.swap-cards[data-loading=on] :is(#trust-word:empty, #pf-word:empty) { box-sizing: border-box; width: 3.4em; height: 0.95em; border-block: 0.12em solid transparent; border-radius: 0.25em; background: color-mix(in srgb, currentColor 12%, transparent) padding-box; }
+@media (prefers-reduced-motion: no-preference) {
+  .swap-cards[data-loading=on] :is(#trust-word:empty, #pf-word:empty) { animation: pulse 1.6s ease-in-out infinite; }
+}
+
+/* A phone: the button and both verdicts share the first screen. The two verdicts are two short tiles side by side, the verdict word
+   big; what each one means sits below them, full width. (The cards turn into their parts: the head is the tile, the body is the detail.) */
 @media (max-width: 44rem) {
-  .swap { padding-top: 0.9rem; }
+  .swap { padding-top: 0.6rem; }
   .swap h1 { font-size: 2rem; }
   .swap-lede { margin-top: 0.5rem; font-size: 1rem; line-height: 1.35; }
-  .swap-hint { font-size: 0.95rem; line-height: 1.3; }
-  .swap-act-note { gap: 0.1rem; }
-  .swap-flips { font-size: 0.9rem; }
-  .swap-act { margin-top: 0.8rem; gap: 0.35rem 1rem; }
+  .swap-act { margin-top: 0.75rem; gap: 0.35rem 1rem; }
   .swap-btn { flex: 1 1 100%; min-height: 3rem; padding-block: 0.6rem; }
-  .swap-status { font-size: 0.8rem; line-height: 1.3; }
+  .swap-act-note { min-height: 2.6em; font-size: 0.8rem; line-height: 1.3; }
   .rob { margin-top: 1rem; padding: 0.9rem 1rem; }
   .rob-title { font-size: 1.1rem; }
   .rob-lede { font-size: 0.92rem; line-height: 1.4; }
@@ -298,33 +337,43 @@ a { color: var(--focus); }
   .rob-card { margin-block: 0.9rem; padding: 0.9rem 1rem; }
   .rob-card .word { font-size: 3.4rem; }
   .swap-stage { margin-top: 0.8rem; }
-  .swap-address { margin-bottom: 0.5rem; }
-  .swap-address code { font-size: 0.82rem; padding: 0.3rem 0.8rem; }
-  .swap-cards { gap: 0.6rem; }
-  .swap-cards .card { padding: 0.75rem 1rem; border-radius: 16px; }
-  .swap-cards .card h2 { font-size: 1rem; }
-  .swap-cards .card-sub { font-size: 0.8rem; }
-  #swap-pf .card-sub, .swap-cards .tech { display: none; }
-  .swap-cards .word { margin-top: 0.2rem; font-size: 2.5rem; }
-  .swap-cards .card-line { min-height: 0; margin-top: 0.3rem; font-size: 0.95rem; line-height: 1.35; }
+  .swap-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem 0.6rem; }
+  .swap-cards[data-loading=on] { min-height: 25.4rem; }
+  .swap-cards .card { display: contents; }
+  .swap-cards .card-head { grid-row: 1; min-width: 0; padding: 0.7rem 0.8rem 0.55rem; background: var(--c-bg) var(--c-img); color: var(--c-fg); border: 1px solid var(--c-edge); border-radius: 16px; transition: background-color 0.35s, border-color 0.35s, color 0.35s; }
+  .swap-cards .card[data-preview=on] .card-head { border-style: dashed; border-width: 2px; }
+  #swap-trust .card-head { grid-column: 1; }
+  #swap-pf .card-head { grid-column: 2; }
+  .swap-cards .card h2 { font-size: 0.95rem; }
+  .swap-cards .card-top { gap: 0.2rem 0.4rem; }
+  .swap-cards .preview-pill { padding: 0 0.45rem; font-size: 0.68rem; }
+  .swap-cards .addr { flex: 1 1 100%; margin: 0; padding: 0; border: 0; font-size: 0.62rem; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .swap-cards .card-sub, .swap-cards .card-head .rules, .swap-cards .more, #swap-trust .noread, #swap-trust .tech { display: none; }
+  .swap-cards .word { margin-top: 0.25rem; font-size: 2.4rem; }
+  .swap-cards .card-body { grid-column: 1 / -1; min-width: 0; flex: none; padding-left: 0.75rem; border-left: 4px solid var(--c-edge); color: var(--ink); --c-sub: var(--muted); }
+  .swap-cards .card-body::before { content: attr(data-label); font-size: 0.82rem; font-weight: 800; }
+  .swap-cards .card-line { min-height: 0; margin-top: 0.1rem; font-size: 0.95rem; line-height: 1.35; }
+  .swap-cards .card[data-preview=on] .card-line { min-height: 4.05em; } /* the BLOCK stage's three lines, held while the loop plays */
+  .swap-cards .looked { padding-top: 0.2rem; margin-top: 0; font-size: 0.82rem; }
+  .swap-cards .preview-note { margin-top: 0.3rem; font-size: 0.82rem; }
   .swap-cards .hashline { padding-top: 0.4rem; }
   .before { margin-top: 0.4rem; padding-top: 0.4rem; }
   .before-title { font-size: 0.95rem; }
   .before-said { margin-top: 0.25rem; font-size: 0.95rem; line-height: 1.35; }
   .before-meta { margin-top: 0.3rem; font-size: 0.82rem; }
-  #swap-pf:has(.before:not([hidden])) > .hashline { display: none; }
+  #swap-pf:has(.before:not([hidden])) .hashline { display: none; }
   .swap-pin { margin-top: 0.6rem; padding: 0.35rem 0.8rem; }
   .pin-line { font-size: 0.9rem; line-height: 1.35; padding-block: 0.15rem; }
   .pin-inline { display: none; }
   .pin-fold > .pin-fp { display: block; }
   .fold.pin-fold summary { font-size: 0.85rem; padding-block: 0.2rem; }
-  /* The button already says "swap it back": the hint, the swap count and the first card's sub-line give way, so the contrast is on a phone's first screen. */
-  .swap:has(.before:not([hidden])) :is(.swap-hint, .swap-flips), .swap:has(.before:not([hidden])) #swap-trust .card-sub { display: none; }
+  /* The button already says "swap it back": the hint and the swap count give way, so the contrast is on a phone's first screen. */
+  .swap:has(.before:not([hidden])) :is(.swap-hint, .swap-flips) { display: none; }
 }
 
 /* Story sections: revealed as they are scrolled to */
 .story { padding-block: clamp(3rem, 9vw, 6rem) 0; }
-.story-head h2 { margin: 0; font: 800 clamp(1.9rem, 4.4vw, 3.1rem)/1.04 var(--sans); letter-spacing: -0.04em; text-wrap: balance; }
+.story-head h2 { margin: 0; font: 800 clamp(1.9rem, 4.4vw, 3.1rem)/1.04 var(--display); letter-spacing: -0.01em; text-wrap: balance; }
 .story-tech { margin: 0.5rem 0 0; max-width: 38rem; color: var(--muted); font-size: 0.88rem; }
 .story-lead { margin: 0.8rem 0 0; max-width: 38rem; font: 700 1.2rem/1.45 var(--sans); }
 .story-sub { margin: 0.8rem 0 0; max-width: 38rem; color: var(--muted); font: 1.15rem/1.5 var(--sans); }
@@ -339,11 +388,18 @@ a { color: var(--focus); }
 
 /* The agent: a transcript that plays one bubble at a time. Rows keep their space while hidden, so nothing jumps. */
 @media (min-width: 62rem) {
-  .agent { display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 3rem; align-items: start; }
-  .agent .story-head { position: sticky; top: 1.5rem; }
+  .agent .story-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 3rem; align-items: end; }
+  .agent .story-head > :is(h2, .agent-note) { grid-column: 1; }
+  .agent .story-head .btn { grid-column: 2; grid-row: 1 / span 2; margin: 0; }
+  .agent .story-head .fold { grid-column: 1 / -1; }
 }
 .agent-steps { list-style: none; margin: 2rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 1.1rem; }
-@media (min-width: 62rem) { .agent-steps { margin-top: 0.4rem; } }
+/* Wide: the agent's side (job, page, call) in one column and what the guard does about it in the other, so the story fills the width and neither column pushes the other. */
+@media (min-width: 62rem) {
+  .agent-steps { display: block; columns: 2; column-gap: 3rem; }
+  .agent-steps > .astep { break-inside: avoid; margin-bottom: 1.1rem; }
+  .agent-steps > #agent-row-check { break-before: column; }
+}
 .astep { margin: 0; display: flex; flex-direction: column; gap: 0.35rem; max-width: 100%; }
 .astep[data-state=off] { visibility: hidden; opacity: 0; }
 .astep[data-state=on] { visibility: visible; opacity: 1; }
@@ -360,16 +416,26 @@ a { color: var(--focus); }
 #agent-row-call p { padding: 0.7rem 1rem; border: 1px solid var(--line); background: var(--code-bg); color: var(--code-fg); border-radius: 0.3rem 1.2rem 1.2rem 1.2rem; font: 0.92rem/1.5 var(--mono); }
 #agent-row-call p::before { content: "> "; opacity: 0.55; }
 #agent-row-check { padding: 0.8rem 1.1rem; background: var(--wash); border-radius: 0.3rem 1.2rem 1.2rem 1.2rem; }
+#agent-row-check .beat-when { font-size: 1.05rem; }
+#agent-row-check .vw { font-size: 0.9rem; }
 .acheck { font-size: 0.95rem; }
-.acheck.plain { font-size: 1.05rem; font-weight: 650; }
-.acheck.tech { margin-top: 0.15rem; color: var(--muted); font-size: 0.82rem; }
+.acheck.tech { margin-top: 0.15rem; padding: 0; border: 0; color: var(--muted); font-size: 0.82rem; }
+.acheck .hash { font-size: 0.8rem; }
+/* The two beats: today's ALLOWED is small and quiet, the refusal after the owner's swap is the big red verdict. Each says Live or Recorded. */
+.beat { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; }
+.beat-when { font-weight: 650; }
+.src { padding: 0.05rem 0.55rem; border: 1px solid currentColor; border-radius: 99px; font-size: 0.75rem; font-weight: 650; opacity: 0.85; white-space: nowrap; }
+.src[data-source=live]::before { content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.35rem; border-radius: 50%; background: currentColor; }
 .agent-out { margin-top: 0.4rem; }
-.agent-out .word { margin-top: 0; font-size: clamp(2.8rem, 9vw, 4.8rem); }
-.agent-out .card-line { min-height: 0; }
+.agent-out .beat-when { color: var(--c-sub); }
+.agent-out .word { margin-top: 0.1rem; font-size: clamp(3rem, 10vw, 5.6rem); }
+.agent-out .card-line { min-height: 0; margin-top: 0.4rem; }
 .agent-fold { margin-top: 0.9rem; color: var(--c-sub); border-top-color: color-mix(in srgb, currentColor 30%, transparent); }
 .agent-fold summary { color: var(--c-fg); }
-.agent-log { margin: 0.6rem 0 0; padding: 0.65rem 0.8rem; background: color-mix(in srgb, var(--c-fg) 12%, transparent); border-radius: 8px; color: var(--c-fg); font: 0.78rem/1.45 var(--mono); white-space: pre; overflow-x: auto; }
-.agent-out .card-sub { margin-top: 0.5rem; }
+.fold.agent-fold > p { color: var(--c-sub); font-size: 0.95rem; line-height: 1.5; max-width: none; }
+.fold.agent-fold > .acheck.tech { color: var(--c-sub); font-size: 0.85rem; margin: 0 0 0.6rem; }
+.fold.agent-fold > .card-sub { margin: 0.5rem 0 0; font-size: 0.85rem; color: color-mix(in srgb, var(--c-fg) 75%, transparent); }
+.agent-log { margin: 0.6rem 0 0; padding: 0.65rem 0.8rem; background: color-mix(in srgb, var(--c-fg) 12%, transparent); border-radius: 8px; color: var(--c-fg); font: 0.78rem/1.45 var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* Folds: details that open in place */
 .fold { border-top: 1px solid var(--line); }
@@ -382,13 +448,18 @@ a { color: var(--focus); }
 .fold > .agent-note + .agent-note { margin-top: -0.4rem; }
 .agent .story-head .fold { margin-top: 1.25rem; }
 .fine summary { cursor: pointer; font-weight: 600; }
+.keys-fold { max-width: 56rem; margin-top: 0.4rem; border-top: 0; }
+.keys-fold summary { padding-block: 0.3rem; color: var(--muted); font-size: 0.92rem; justify-content: flex-start; }
+.read-fold { max-width: 38rem; margin-top: 0.6rem; }
+.read-fold > p { font-size: 0.95rem; }
+#mainnet-read { font-size: 0.88rem; }
 
 /* How it works */
 .steps { list-style: none; margin: 2rem 0 0; padding: 0; display: grid; gap: 1rem; }
 @media (min-width: 48rem) { .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.25rem; } }
 .step { display: flex; flex-direction: column; padding: 1.5rem; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
 .step svg { width: 3.4rem; height: 3.4rem; fill: none; stroke: var(--brand); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.step h3 { margin: 1.1rem 0 0; font: 800 1.35rem/1.2 var(--sans); letter-spacing: -0.03em; }
+.step h3 { margin: 1.1rem 0 0; font: 800 1.35rem/1.2 var(--display); letter-spacing: 0; }
 .step p { margin: 0.5rem 0 0; color: var(--muted); font: 1.05rem/1.5 var(--sans); }
 .step p.tag { align-self: flex-start; margin: 0.45rem 0 0; font: 700 0.75rem/1.4 var(--mono); }
 .step p.step-tech { margin: 0.6rem 0 1.1rem; font-size: 0.85rem; line-height: 1.45; }
@@ -400,16 +471,21 @@ a { color: var(--focus); }
 .survey-table caption { padding: 0.5rem 0 0.2rem; text-align: left; color: var(--muted); font-size: 0.82rem; }
 .survey-table th, .survey-table td { padding: 0.4rem 0.6rem 0.4rem 0; text-align: left; font-weight: 400; border-top: 1px solid var(--line); }
 .survey-table thead th { border-top: 0; color: var(--muted); font-size: 0.82rem; font-weight: 650; }
-.survey-table tbody th code { overflow-wrap: anywhere; }
+
 .survey-table .num { text-align: right; padding-right: 0; font-variant-numeric: tabular-nums; }
 .survey-table thead th:last-child { text-align: right; padding-right: 0; }
 .survey-fold { max-width: 46rem; margin-top: 0.75rem; }
 .survey-links { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.92rem; }
+.survey-table tbody th code { white-space: nowrap; overflow-wrap: normal; }
 @media (max-width: 30rem) {
   .survey { padding-inline: 0.8rem; }
   .survey-table { font-size: 0.85rem; }
   .survey-table th, .survey-table td { padding-right: 0.4rem; }
   .survey-table .hash { max-width: 8ch; font-size: 0.8rem; }
+}
+/* Narrower than a small phone the fingerprint column goes: a name and a key count are what the table is for. */
+@media (max-width: 26.25rem) {
+  .survey-table :is(th:nth-child(2), td:nth-child(2)) { display: none; }
 }
 
 /* The scanner */

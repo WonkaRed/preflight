@@ -1,11 +1,14 @@
-//! The Swap, chameleon (patched build): a deposit vault whose settlement callback is restricted by `#[private]`.
+//! The Swap, chameleon: a deposit vault that exists as two builds, V and P, which differ in one line of code.
 //!
 //! `deposit` sends a 1% fee to the treasury and schedules `on_deposit` to credit the rest once the fee transfer
-//! settles. `on_deposit` can only be called by the contract itself, so the only way to credit a balance is to pay.
-//! The vulnerable build differs from this file in one line of code: it has `#[private]` on `on_deposit`.
+//! settles. The single difference between the builds is `#[private]` on `on_deposit`: without it (V) any account can
+//! call it directly, credit itself any balance with no payment and `withdraw` what other depositors put in; with it
+//! (P) the only way to credit a balance is to pay.
 //!
 //! Whatever the ledger says, no transfer leaves the account with less than its storage cost plus a reserve, so a
 //! forged credit can take what depositors put in but never the money that pays for this contract's own code.
+//! No outside caller makes the contract pay for new storage either: `deposit` charges the caller for the balance
+//! entry it creates, and nothing else inserts one (`on_deposit` and `withdraw` only update an entry that exists).
 //!
 //! Both builds read the same state, so the switch can swap one for the other with `upgrade`.
 
@@ -61,6 +64,7 @@ impl Vault {
             .then(Self::ext(env::current_account_id()).on_deposit(depositor, gross.saturating_sub(storage), net))
     }
 
+    // The settlement callback. The two builds differ only in whether `#[private]` stands on the next line.
     #[private]
     pub fn on_deposit(&mut self, depositor: AccountId, refund: NearToken, net: NearToken) {
         // A failed fee transfer credits nothing: the deposit goes back, less the storage it paid for.
@@ -78,9 +82,9 @@ impl Vault {
     pub fn withdraw(&mut self, amount: NearToken) -> Promise {
         assert_one_yocto();
         let account = env::predecessor_account_id();
-        let balance = self.balances.get(&account).copied().unwrap_or(NearToken::from_yoctonear(0));
-        let left = balance.checked_sub(amount).unwrap_or_else(|| env::panic_str("insufficient balance"));
-        self.balances.insert(account.clone(), left);
+        // Updates the entry in place and never creates one: a caller with no entry would otherwise make the contract pay for it.
+        let balance = self.balances.get_mut(&account).unwrap_or_else(|| env::panic_str("no balance"));
+        *balance = balance.checked_sub(amount).unwrap_or_else(|| env::panic_str("insufficient balance"));
         pay_out(account, amount)
     }
 

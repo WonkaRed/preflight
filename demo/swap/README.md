@@ -25,12 +25,12 @@ The chameleon holds zero full-access keys, yet its code has already changed doze
 
 | Build | Code hash (base58, as NEAR shows it) | SHA-256 (hex) | Scanner | Registry verdict |
 | --- | --- | --- | --- | --- |
-| V, vulnerable | `CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj` | `a90bdd6b7620881bdf98504748ff26db9e03dcd20592a975eb91fe3c84044942` | PF001 | Unsafe, `["PF001"]` |
-| P, patched | `Gg8KdwiNHoP9tpzGismdHrpUiqmfNNcib3rp9iEKT4Hh` | `e8e53bd3c02aa77779d4f078f38457562b93af4355e6262dd54c7ff7b1be9cc4` | no findings | Safe, `[]` |
+| V, vulnerable (third pair, live) | `2d5fGvow9gegbnoLxCFsKXamPhx6q5pwKKzEyXE1kZuH` | `1819dd7267194a854a42f5c8863eb264c33f5b04a9e818ab2390f1be506ea4b0` | PF001 | Unsafe, `["PF001"]` |
+| P, patched (third pair, live) | `DGX3R5LVrWNuGxL6urp8f8TRS2bA2AZdTBnssMuhnrpY` | `b645ec66b62f2a99c132f83e74917ee1710be969f6125e010274f397297c1cb1` | no findings | Safe, `[]` |
 
-The two builds are `chameleon/vulnerable/src/lib.rs` and `chameleon/patched/src/lib.rs`. They are the same vault and differ in one line of code: P has `#[private]` on `on_deposit`, V has a comment there. A test (`the_two_chameleon_sources_differ_only_in_the_callback_guard`) keeps it that way, so the two builds read the same state and the swap needs no migration.
+The two builds are `chameleon/vulnerable/src/lib.rs` and `chameleon/patched/src/lib.rs`. They are the same vault and differ in one line of code: P has `#[private]` on `on_deposit`, V has nothing there (`diff -r chameleon/vulnerable/src chameleon/patched/src` prints that one line, comments included). A test (`the_two_chameleon_sources_differ_only_in_the_callback_guard`) keeps it that way, so the two builds read the same state and the swap needs no migration.
 
-These are the second pair of builds. The first pair (V `HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa`, P `BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj`) let a stranger drain the chameleon's own storage money (below), which made later flips fail; their registry verdicts are still in the registry, and no account runs them any more. The report files in `reports/` are the second pair's, so a report hash recorded for the first pair no longer matches the file at its URL.
+This is the third pair. It closes a storage-griefing hole of the second pair: `withdraw` created a balance entry, which the contract paid for, for a caller who had none, so fresh accounts could grow its storage until an upgrade could no longer be paid. Now `withdraw` only updates an entry that exists and panics `no balance` otherwise (a sandbox test checks that storage does not move). The second pair (V `CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj`, P `Gg8KdwiNHoP9tpzGismdHrpUiqmfNNcib3rp9iEKT4Hh`) had that hole, and the first pair (V `HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa`, P `BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj`) let a stranger drain the chameleon's own storage money (below), which made later flips fail; the registry still holds the verdicts of both older pairs, and no account runs them any more. The report files in `reports/` are the newest pair's, so a report hash recorded for an older pair no longer matches the file at its URL.
 
 ### The vulnerability is real
 
@@ -88,7 +88,7 @@ It prints one line (`swap-watchdog <time> OK|FAIL | switch_spare=… chameleon_s
 | chameleon spare | 0.3 NEAR | the same, up to 1 NEAR; the contract itself never lets it fall under 0.5 NEAR, so this floor trips only if something else is wrong |
 | flip key allowance | 1 NEAR | `switch.preflight-guard.testnet` (`<dir>/switch.preflight-guard.testnet.key`) deletes and re-adds the same public key with 5 NEAR, in one transaction |
 
-Without `PREFLIGHT_TESTNET_KEYS` it only reads and reports. The funder is the parent account, which holds 0.31 NEAR now (the rest was moved to the switch): past that, the line says FAIL and someone must send testnet NEAR to `preflight-guard.testnet` (the faucet, when it is up).
+Without `PREFLIGHT_TESTNET_KEYS` it only reads and reports. The funder is the parent account: when its spare runs out, the line says FAIL and someone must send testnet NEAR to `preflight-guard.testnet` (the faucet, when it is up).
 
 ## What a page needs
 
@@ -100,8 +100,8 @@ Reads, JSON-RPC `query` with `request_type: "call_function"`, `finality: "final"
 {
   "chameleon": "chameleon.preflight-guard.testnet",
   "live": "vulnerable",
-  "vulnerable": { "code_hash": "CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj", "code_hash_hex": "a90bdd6b7620881bdf98504748ff26db9e03dcd20592a975eb91fe3c84044942", "size_bytes": 143321 },
-  "patched": { "code_hash": "Gg8KdwiNHoP9tpzGismdHrpUiqmfNNcib3rp9iEKT4Hh", "code_hash_hex": "e8e53bd3c02aa77779d4f078f38457562b93af4355e6262dd54c7ff7b1be9cc4", "size_bytes": 143650 },
+  "vulnerable": { "code_hash": "2d5fGvow9gegbnoLxCFsKXamPhx6q5pwKKzEyXE1kZuH", "code_hash_hex": "1819dd7267194a854a42f5c8863eb264c33f5b04a9e818ab2390f1be506ea4b0", "size_bytes": 143111 },
+  "patched": { "code_hash": "DGX3R5LVrWNuGxL6urp8f8TRS2bA2AZdTBnssMuhnrpY", "code_hash_hex": "b645ec66b62f2a99c132f83e74917ee1710be969f6125e010274f397297c1cb1", "size_bytes": 143440 },
   "flips": 9,
   "last_flip_ms": 1794425509139,
   "min_interval_ms": 20000,
@@ -114,7 +114,7 @@ Reads, JSON-RPC `query` with `request_type: "call_function"`, `finality: "final"
 
 ```json
 {
-  "code_hash": "CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj",
+  "code_hash": "2d5fGvow9gegbnoLxCFsKXamPhx6q5pwKKzEyXE1kZuH",
   "status": "Unsafe",
   "rule_ids": ["PF001"],
   "report_url": "https://github.com/WonkaRed/preflight/blob/main/demo/swap/reports/chameleon-vulnerable.json",
@@ -193,7 +193,7 @@ PREFLIGHT_TESTNET_KEYS=<dir with <account>.key files> \
 node --disable-warning=ExperimentalWarning scripts/record.ts --key <dir>/swap-flip-public.key
 ```
 
-A later deployment of new builds behind the same accounts (publish their verdicts, top both accounts up, replace the switch in place, one flip) is the same command with `--generation 2 [--switch-topup 8] [--allowance 5] [--chameleon-topup 0.8]`.
+A later deployment of new builds behind the same accounts (publish their verdicts, top both accounts up, replace the switch in place, one flip) is the same command with `--generation <n> [--switch-topup 8] [--allowance 5] [--chameleon-topup 0.8]` (2 put the second pair live, 3 puts the third).
 
 Every step is recorded in `deployment.json` as it happens, and a rerun skips the recorded steps. Keys are written to `<dir>` with mode 0600 and never printed.
 
@@ -203,6 +203,9 @@ Every step is recorded in `deployment.json` as it happens, and a rerun skips the
 - The 20 s interval starts when `flip` is accepted, before the upgrade lands. If an upgrade ever took longer than that, a second flip could read a stale `live` and send the same build again: harmless, since the build is the one the first flip is already installing.
 - The sandbox tests build the contracts with the repository's wasm flags, not `make build`'s path remapping; the code is the same, the bytes (and hashes) differ.
 - The chameleon's treasury is `preflight-guard.testnet`; the vault is a demonstration and has no way to recover funds sent to it other than `withdraw`.
+- Credit forged while the vulnerable build is live stays on the books after the patched build is swapped back in, as it would after a real incident: the patched build stops new forgeries and does not erase old ones.
+- The flip key and the robber key are public by design (they ship in the page), so anyone can spend their gas allowance or keep flipping and forging credit. The watchdog refills both from testnet funds.
+- The escrow shops of the guard demo (the PF001 fixture pair) let any caller create order entries, and the contract pays for that storage. The owner tops those accounts up.
 
 ## Keeping it alive
 

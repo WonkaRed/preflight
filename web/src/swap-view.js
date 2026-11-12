@@ -4,26 +4,29 @@
 // built only from a validated transaction hash or account id plus the configured explorer.
 import { changedSince } from './code-pin.js';
 import { isHash } from './near.js';
-import { clean, h } from './report.js';
+import { clean, h, plural } from './report.js';
 import { createRob } from './rob.js';
 import { createSwap, isAccountId, parseRecorded } from './swap.js';
 import { agentScript, mountAgent, RULE_WORDS } from './swap-agent.js';
+import { createPreview } from './swap-preview.js';
 import { SWAP_CONFIG } from './swap-config.js';
 
 // What each BLOCK says first, in words anyone can read, and the exact technical sentence behind it (shown in the card's fold-out).
+// The one rule the demo's two builds differ on (the registry's Safe verdict carries no rule ids).
+const DEMO_RULE = 'PF001';
 const BUG_PLAIN = {
   PF001: 'This code has a hole: anyone can give themselves a balance and take what other people deposited.',
 };
 const BUG_LINE = {
   PF001: 'Any account can call the contract\'s callback directly, so anyone can credit themselves a balance without paying and withdraw what others deposited.',
 };
-// The line beside the swap button. Live, it follows what the visitor is looking at: the fixed code they arrived to (the invitation),
+// The line beside the swap button, after the live status. Live, it follows what the visitor is looking at: the fixed code they arrived to (the button and the preview say it all),
 // the bad code they swapped in, the bad code someone else left behind (the contract is shared), and the fixed code after a swap.
 const HINT = {
   loading: '',
   resting: 'The code was just swapped. The demo rests a moment between swaps.',
   recorded: 'Press it to replay a recorded swap of the code behind this address.',
-  fixed: 'Right now this contract is fine, and both checks say yes. A contract\'s owner can swap its code at any time. Play the owner: swap in the bad code and see which check notices.',
+  fixed: '',
   fixedAgain: 'The fixed code is back. Swap the bad code in again and watch Preflight react.',
   bad: 'Same address, new code. The address check cannot tell. Preflight can, because it reads the code.',
   badLeft: 'Someone left this contract on its bad code, so Preflight says BLOCK while the address check still says ALLOW. Swap in the fixed code, then swap the bad one back, to watch it change.',
@@ -60,6 +63,35 @@ const STATUS = {
     : 'No live contract is set up in this copy of the page, and no recording is bundled.'),
 };
 
+/** What the hero's preview needs: the recorded run's bad build to turn the card into, or null when there is none to show. */
+function previewOf(state) {
+  const bad = state.recorded?.steps.find((step) => step.decision === 'BLOCK');
+  return bad ? { hash: state.codeHash, bad: pfOf(bad, bad) } : null;
+}
+const NO_PF = { tone: 'none', word: '', rules: '', ruleWords: '', line: '', tech: '', tag: { text: '', state: 'none' }, build: '', hash: '' };
+/** The Preflight card for a code (`shown`: its build and hash) and the registry verdict for it. */
+function pfOf(shown, verdict) {
+  const rule = verdict.ruleIds[0];
+  const rules = verdict.ruleIds.join(', ');
+  const word = verdict.decision;
+  return {
+    tone: word.toLowerCase(),
+    word,
+    rules,
+    ruleWords: RULE_WORDS[rule] ?? '',
+    line: word === 'BLOCK' ? (BUG_PLAIN[rule] ?? 'This code is marked unsafe.')
+      : word === 'ALLOW' ? 'This is the fixed code. Preflight says yes.'
+        : verdict.registered ? 'This code has a warning on record.' : 'Nobody has vouched for this code, or it changed after it was checked.',
+    tech: word === 'BLOCK' ? (BUG_LINE[rule] ?? `The registry marks this exact code unsafe (${rules}).`)
+      : word === 'ALLOW' ? 'No known issue fired on this exact code (registry status: Safe).'
+        : verdict.registered ? `The registry marks this exact code Warn (${rules}).` : 'The registry has no verdict for this code: unaudited, or changed since its audit.',
+    // The safe verdict says which check came back clear, as a green chip, instead of showing the id of a bug that was not found.
+    tag: word === 'ALLOW' ? { text: `${DEMO_RULE} check: clear`, state: 'clear' } : { text: rules, state: 'found' },
+    build: { vulnerable: 'Vulnerable build', patched: 'Patched build' }[shown.build] ?? 'A build this page does not know',
+    hash: shown.codeHash,
+  };
+}
+
 /** What the page shows for a state at time `now` (epoch ms). `explorerUrl` is where transaction and account links go. */
 export function viewModel(state, { now, explorerUrl }) {
   const { mode, address } = state;
@@ -68,25 +100,7 @@ export function viewModel(state, { now, explorerUrl }) {
   const verdict = replay ?? state.verdict;
   const known = mode === 'live' || mode === 'recorded';
 
-  const pf = { tone: 'none', word: '...', rules: '', ruleWords: '', line: '', tech: '', build: '', hash: '' };
-  if (known && verdict) {
-    const rule = verdict.ruleIds[0];
-    pf.tone = verdict.decision.toLowerCase();
-    pf.word = verdict.decision;
-    pf.rules = verdict.ruleIds.join(', ');
-    pf.ruleWords = RULE_WORDS[rule] ?? '';
-    pf.line = verdict.decision === 'BLOCK' ? (BUG_PLAIN[rule] ?? 'This code is marked unsafe.')
-      : verdict.decision === 'ALLOW' ? 'This is the fixed code. Preflight says yes.'
-        : verdict.registered ? 'This code has a warning on record.' : 'Nobody has vouched for this code, or it changed after it was checked.';
-    pf.tech = verdict.decision === 'BLOCK'
-      ? (BUG_LINE[rule] ?? `The registry marks this exact code unsafe (${pf.rules}).`)
-      : verdict.decision === 'ALLOW' ? 'No known issue fired on this exact code (registry status: Safe).'
-        : verdict.registered ? `The registry marks this exact code Warn (${pf.rules}).` : 'The registry has no verdict for this code: unaudited, or changed since its audit.';
-    pf.build = { vulnerable: 'Vulnerable build', patched: 'Patched build' }[shown.build] ?? 'A build this page does not know';
-    pf.hash = shown.codeHash;
-  } else if (mode === 'empty') {
-    pf.word = 'No data';
-  }
+  const pf = known && verdict ? pfOf(shown, verdict) : { ...NO_PF, word: mode === 'empty' ? 'No data' : '' };
 
   const txLink = (hash, text) => (isHash(hash) ? { href: `${explorerUrl}/tx/${hash}`, text } : null);
   // The auditor-free check: no registry, no verdict, only the fingerprint this visitor first saw against the one live now. Live reads only.
@@ -113,7 +127,7 @@ export function viewModel(state, { now, explorerUrl }) {
   const button = mode === 'recorded' ? { label: 'Replay a recorded swap', disabled: false }
     : swapping ? { label: 'Swapping...', disabled: true }
       : resting ? { label: `Ready in ${Math.ceil(waitMs / 1000)} s`, disabled: true }
-        : { label: SWAP_LABEL[mode === 'live' ? state.build : null] ?? 'Swap the code', disabled: mode !== 'live' };
+        : { label: SWAP_LABEL[mode === 'live' ? state.build : mode === 'loading' ? 'patched' : null] ?? 'Swap the code', disabled: mode !== 'live' };
   const liveHint = { patched: change ? HINT.fixedAgain : HINT.fixed, vulnerable: change ? HINT.bad : HINT.badLeft }[state.build] ?? HINT.other;
 
   let tx = null;
@@ -143,12 +157,30 @@ export function viewModel(state, { now, explorerUrl }) {
     pf,
     before,
     pin,
-    agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, step: replay ? state.replay : 0, before: prior }),
+    agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, recorded: state.recorded }),
+    loading: mode === 'loading',
+    keys: `No admin keys, and its code still ${mode === 'live' && state.flips !== null ? `changed ${plural(state.flips, 'time')}` : 'changes'}.`,
+    previewNote: '',
+    preview: mode === 'live' && state.build === 'patched' && verdict?.decision === 'ALLOW' ? previewOf(state) : null,
     hint: resting && !change ? HINT.resting : mode === 'live' ? liveHint : HINT[mode] ?? '',
     button,
     tx,
     flips: replay ? (state.replay === 0 ? '' : `Recorded swap ${state.replay} of ${state.recorded.steps.length - 1}`) : mode === 'live' && state.flips !== null ? `Swaps so far: ${state.flips}` : '',
   };
+}
+
+const PREVIEW_NOTE = {
+  safe: 'Preview. Today both checks say yes.',
+  swap: 'Preview. The owner swaps the code: the fingerprint changes.',
+  bad: 'Preview. Preflight now says BLOCK. The allowlist still says ALLOW.',
+  still: 'Preview. If the owner swaps the code, Preflight turns to BLOCK and the allowlist keeps saying ALLOW. Press the button to try it for real.',
+};
+/** The model with the preview's stage on the Preflight card (from `createPreview`), or as it is when none is showing. Always labelled. */
+export function withPreview(model, stage) {
+  const { preview } = model;
+  if (!stage || !preview) return model;
+  const pf = stage === 'bad' ? preview.bad : stage === 'swap' ? { ...model.pf, hash: preview.bad.hash } : model.pf;
+  return { ...model, pf, previewNote: PREVIEW_NOTE[stage] };
 }
 
 /** Writes a view model into the section's elements (`els`, by name). `animate`: nudge the verdict when it changes. */
@@ -158,9 +190,10 @@ export function paint(doc, els, model, { animate = false } = {}) {
   els.status.setAttribute('data-tone', model.status.tone);
   els.detail.textContent = model.detail;
   els.source.textContent = model.source;
-  els.address.replaceChildren(model.addressHref
-    ? h(doc, 'a', { href: model.addressHref, target: '_blank', rel: 'noopener noreferrer' }, model.address)
-    : model.address);
+  for (const el of els.address) {
+    el.replaceChildren(model.addressHref ? h(doc, 'a', { href: model.addressHref, target: '_blank', rel: 'noopener noreferrer' }, model.address) : model.address);
+  }
+  els.cards.setAttribute('data-loading', model.loading ? 'on' : 'off');
   els.trustWord.textContent = model.trust.word;
   els.trustNote.textContent = model.trust.note;
   els.pfCard.setAttribute('data-tone', model.pf.tone);
@@ -169,6 +202,13 @@ export function paint(doc, els, model, { animate = false } = {}) {
   els.pfRules.setAttribute('title', model.pf.ruleWords);
   els.pfLine.textContent = model.pf.line;
   els.pfTech.textContent = model.pf.tech;
+  els.pfTag.textContent = model.pf.tag.text;
+  els.pfTag.setAttribute('data-state', model.pf.tag.state);
+  els.pfTag.hidden = model.pf.tag.text === '';
+  els.pfPreview.textContent = model.previewNote;
+  els.pfPreview.hidden = els.pfPreviewPill.hidden = model.previewNote === '';
+  els.pfCard.setAttribute('data-preview', model.previewNote === '' ? 'off' : 'on');
+  els.keys.textContent = model.keys;
   els.pfBuild.textContent = model.pf.build;
   els.pfHash.textContent = model.pf.hash;
   els.pfHash.setAttribute('title', model.pf.hash);
@@ -280,8 +320,8 @@ export function paintRob(doc, els, model, { animate = false } = {}) {
 }
 
 export const IDS = {
-  status: 'swap-status', detail: 'swap-detail', source: 'swap-source', address: 'swap-address', trustWord: 'trust-word', trustNote: 'trust-note',
-  pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfTech: 'pf-tech', pfBuild: 'pf-build', pfHash: 'pf-hash',
+  status: 'swap-status', detail: 'swap-detail', source: 'swap-source', cards: 'swap-cards', keys: 'swap-keys', trustWord: 'trust-word', trustNote: 'trust-note',
+  pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfTech: 'pf-tech', pfBuild: 'pf-build', pfHash: 'pf-hash', pfTag: 'pf-tag', pfPreview: 'pf-preview', pfPreviewPill: 'pf-preview-pill',
   before: 'swap-before', beforeTitle: 'before-title', beforeWord: 'before-word', beforeRules: 'before-rules', beforeReason: 'before-reason', beforeHash: 'before-hash', beforeTx: 'before-tx',
   pin: 'swap-pin', pinThen: 'pin-then', pinNow: 'pin-now', pinFoldThen: 'pin-fold-then', pinFoldNow: 'pin-fold-now', pinKeys: 'pin-keys',
   button: 'swap-button', hint: 'swap-hint', flips: 'swap-flips', tx: 'swap-tx',
@@ -294,7 +334,7 @@ export const ROB_IDS = {
 
 /** Starts the section on the page and returns its controller. Never throws: whatever goes wrong, the section shows a state that says so. */
 export async function mountSwap(doc = document, config = SWAP_CONFIG) {
-  const els = Object.fromEntries(Object.entries(IDS).map(([name, id]) => [name, doc.getElementById(id)]));
+  const els = { ...Object.fromEntries(Object.entries(IDS).map(([name, id]) => [name, doc.getElementById(id)])), address: [...doc.querySelectorAll('[data-address]')] };
   const robEls = Object.fromEntries(Object.entries(ROB_IDS).map(([name, id]) => [name, doc.getElementById(id)]));
   const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let recorded = null;
@@ -309,12 +349,22 @@ export async function mountSwap(doc = document, config = SWAP_CONFIG) {
   let watching = false;
   let shown = '';
   let pfTone = 'none';
+  let model = null;
+  let previewShown = false;
+  // The preview paints over the live model on the Preflight card only; the allowlist card, the button and the agent never see it.
+  const paintHero = () => {
+    const stage = preview.stage();
+    paint(doc, els, withPreview(model, stage), { animate: !calm && (stage === null ? !previewShown : stage === 'bad') });
+    previewShown = stage !== null;
+  };
+  const preview = createPreview({ calm, onChange: () => { if (model) paintHero(); } });
   // "Rob it" paints on its own clicks too (signing and sending take a moment); it never polls the chain by itself.
   const renderRob = () => paintRob(doc, robEls, robViewModel(rob.getState(), pfTone, config.explorerUrl), { animate: !calm });
   const render = () => {
     const state = swap.getState();
-    const model = viewModel(state, { now: Date.now(), explorerUrl: config.explorerUrl });
-    paint(doc, els, model, { animate: !calm });
+    model = viewModel(state, { now: Date.now(), explorerUrl: config.explorerUrl });
+    preview.sync(model.preview && { hash: model.preview.hash });
+    paintHero();
     agent.update(model.agent);
     pfTone = model.pf.tone;
     rob.sync(state.mode === 'live', state.mode === 'live' ? state.codeHash : null);
@@ -327,8 +377,8 @@ export async function mountSwap(doc = document, config = SWAP_CONFIG) {
   swap = createSwap({ config, recorded, onChange: render });
   rob = createRob({ config, onChange: renderRob });
   render();
-  els.button.addEventListener('click', () => { watching = true; Promise.resolve(swap.flip()).finally(() => { watching = false; }); });
-  robEls.robButton.addEventListener('click', () => { rob.rob(); });
+  els.button.addEventListener('click', () => { preview.press(); watching = true; Promise.resolve(swap.flip()).finally(() => { watching = false; }); });
+  robEls.robButton.addEventListener('click', () => { preview.press(); rob.rob(); });
   // The countdown on the button needs a repaint each second; nothing else changes between polls.
   setInterval(() => { if (swap.getState().waitUntil !== null) render(); }, 500);
   doc.addEventListener('visibilitychange', () => { if (!doc.hidden) swap.wake(); });
