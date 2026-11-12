@@ -34,6 +34,8 @@ First match wins. `checkContract` never throws for network or registry trouble; 
 | No verdict for this code hash: unaudited, or changed since its audit | `warn` |
 | Verdict `Safe` | `allow` |
 
+With `GuardConfig.mutability` on, a no-verdict `warn` also says who can replace the code, and a hash that differs from the pinned one is held (`warn`, or `block`): see "Who can replace the code" below. Off by default.
+
 `GuardedAgent.guardedCall` adds, in this order and before it signs anything:
 
 1. **Local policy** (below): refused as `block` before any RPC call.
@@ -180,6 +182,55 @@ A line is at most 16384 bytes: at most 16 reasons are kept, and trailing reasons
 each its own `logPath`.) `RefusedError.entry` is the same sanitized object that was logged, and its message is built
 from it.
 
+## Who can replace the code: a check that needs no auditor
+
+An audit is about one code hash, and an address does not pin its code: an account that holds a full-access key can deploy
+new code at any time. I added a check that answers "can the code behind this address be changed, and did it change since I
+approved it?" from chain facts alone, with no registry and no auditor. It is off by default, so everything above behaves as
+before. Turn it on with `GuardConfig.mutability`:
+
+```ts
+import { CodePins, GuardedAgent } from "@preflight/guard";
+
+const guard = {
+  rpcUrl: "https://free.rpc.fastnear.com",
+  registryId: "registry.example.near",
+  mutability: { pins: await CodePins.open("pins.json"), onCodeChange: "block" }, // `{}` turns on the key fact alone
+};
+```
+
+- **Keys.** When the registry has no verdict for the code, I add a reason read from `view_access_key_list`: "code at this
+  address can be replaced by a key holder at any time (N full-access keys)", or "no full-access key on this account, so no key
+  holder can deploy new code to it". The decision stays `warn`; the reason is what the approver reads. With a verdict I make
+  no extra read. A global contract that follows a publisher by account id names the publisher, who can replace it whatever
+  keys this account holds, and `readMutability` reports no code hash for it (the account names none). A key list the node says
+  it cut short (`last_key`) is a `block`.
+- **Pins.** `pins` remembers the code hash of a contract at the first `allow` (in `GuardedAgent`, also when an approver
+  accepts a `warn`). On a later check a different hash is held: `warn` by default, `block` with `onCodeChange: "block"`, with
+  the reason "code changed since you last approved it" and both hashes. A new hash with a `Safe` verdict is held too, because
+  the pin remembers what I approved, not what was audited. A `warn` that is approved pins the new hash; with the process
+  stopped, deleting an entry from the file does the same by hand (a running process keeps its pins in memory and would write
+  the entry back). `CodePins.open()` keeps pins in memory, `CodePins.open(path)` also in a JSON file (account id to hash)
+  that is rewritten atomically. One `CodePins` belongs to one network, because the same account id can exist on both, and
+  a file store belongs to one process: `open` takes a lock file (`<path>.lock`) and refuses to start while a live process
+  holds it, so two processes cannot overwrite each other's pins. A pin is only moved from the value the check read
+  (`set(id, hash, expectedPrevious)`); if another check moved it meanwhile the call is refused. A pin that cannot be saved
+  turns an `allow` into a `block` (the reason names no path; the detail goes to stderr), and a pin file that cannot be read
+  stops the start instead of reading as empty. A `mutability` setting that is not valid (an `onCodeChange` other than
+  "warn" or "block") throws a `TypeError` instead of being read as the milder choice.
+- **Facts for a script.** `readMutability(accountId, config)` returns the code hash and the number of full-access keys, and
+  `describeMutability` writes them as a sentence that always ends with what they cannot show. `make -C guard mutability-check`
+  runs it against `chameleon.preflight-guard.testnet` on testnet, read-only; `make -C guard mainnet-survey` rewrites
+  [`docs/mainnet-survey.md`](../docs/mainnet-survey.md), a table of well-known mainnet contracts, also read-only.
+- **MCP.** The server turns it on with `PREFLIGHT_MCP_MUTABILITY` (`keys`, `pin-warn` or `pin-block`) and, to keep pins
+  across restarts, `PREFLIGHT_MCP_PINS` (an absolute directory, one server process per directory); the reasons of `preflight_check_contract` and
+  `preflight_guarded_call` then carry the facts. See [`mcp/README.md`](mcp/README.md).
+
+What I cannot establish: zero full-access keys on an account does not mean the code is fixed, because a contract can upgrade itself
+through one of its own methods and a key count cannot show that. I also do not report when the code last changed: the node's
+`changes` query (`contract_code_changes`) answers for one block at a time, so there is no way to look back without scanning
+blocks. The pin covers the part I can see: a change after the first time I approved the code.
+
 ## Function-call access keys: what they can and cannot do
 
 Verified against the [NEAR access key docs](https://docs.near.org/protocol/access-keys). The agent should hold a
@@ -248,7 +299,7 @@ The agent obeys the page. Every call goes through GuardedAgent.guardedCall:
 [2] ghost-vault.test.near.deposit_and_forward        REFUSED  (injected call; spending guard alone: would sign)
       block: registry verdict Unsafe (PF004): published by auditor.test.near, report https://preflight.invalid/reports/EUGkjVii.json
 [3] swapped-escrow.test.near.release_all             REFUSED  (injected call; spending guard alone: would sign)
-      warn: code hash 9rKqrgvMBznHcRs3hCRL2sAzZV7jowRZ42TGV4setVpZ has no verdict in the registry: unaudited code, or code changed since its audit; not approved by the approval callback
+      warn: code hash 9rKqrgvMBznHcRs3hCRL2sAzZV7jowRZ42TGV4setVpZ has no verdict in the registry: unaudited code, or code changed since its audit; code at this address can be replaced by a key holder at any time (1 full-access key); the guard cannot see whether the contract upgrades itself through a method; not approved by the approval callback
       human approval requested for swapped-escrow.test.near.release_all; nobody is at the keyboard in this unattended run, so it is declined
 [4] drain.test.near.deposit with 50 NEAR             REFUSED  (injected payment; spending guard alone: would refuse)
       block: policy: drain.test.near is not in the allowed contracts
@@ -259,7 +310,7 @@ Decision log (demo-output/decisions.jsonl), one JSON line per decision:
   {"timestamp":"2026-11-14T12:00:00.000Z","contract":"safe-escrow.test.near","method":"release","deposit":"0","codeHash":"Dj4BHfGyUeby9oci9YotVYPBj7VefdRxu6usnkLt3LYZ","decision":"allow","outcome":"approved","reasons":["registry verdict Safe: published by auditor.test.near, report https://preflight.invalid/reports/Dj4BHfGy.json"]}
   {"timestamp":"2026-11-14T12:00:01.000Z","contract":"safe-escrow.test.near","method":"release","deposit":"0","codeHash":"Dj4BHfGyUeby9oci9YotVYPBj7VefdRxu6usnkLt3LYZ","decision":"allow","outcome":"sent","reasons":["registry verdict Safe: published by auditor.test.near, report https://preflight.invalid/reports/Dj4BHfGy.json"]}
   {"timestamp":"2026-11-14T12:00:02.000Z","contract":"ghost-vault.test.near","method":"deposit_and_forward","deposit":"0","codeHash":"EUGkjViicwFksDhfk39tUbd3PwBER9rKRwioJmdhqwii","decision":"block","outcome":"refused","reasons":["registry verdict Unsafe (PF004): published by auditor.test.near, report https://preflight.invalid/reports/EUGkjVii.json"]}
-  {"timestamp":"2026-11-14T12:00:03.000Z","contract":"swapped-escrow.test.near","method":"release_all","deposit":"0","codeHash":"9rKqrgvMBznHcRs3hCRL2sAzZV7jowRZ42TGV4setVpZ","decision":"warn","outcome":"refused","reasons":["code hash 9rKqrgvMBznHcRs3hCRL2sAzZV7jowRZ42TGV4setVpZ has no verdict in the registry: unaudited code, or code changed since its audit","not approved by the approval callback"]}
+  {"timestamp":"2026-11-14T12:00:03.000Z","contract":"swapped-escrow.test.near","method":"release_all","deposit":"0","codeHash":"9rKqrgvMBznHcRs3hCRL2sAzZV7jowRZ42TGV4setVpZ","decision":"warn","outcome":"refused","reasons":["code hash 9rKqrgvMBznHcRs3hCRL2sAzZV7jowRZ42TGV4setVpZ has no verdict in the registry: unaudited code, or code changed since its audit","code at this address can be replaced by a key holder at any time (1 full-access key)","the guard cannot see whether the contract upgrades itself through a method","not approved by the approval callback"]}
   {"timestamp":"2026-11-14T12:00:04.000Z","contract":"drain.test.near","method":"deposit","deposit":"50000000000000000000000000","codeHash":null,"decision":"block","outcome":"refused","reasons":["policy: drain.test.near is not in the allowed contracts"]}
 
 The chain received 1 transaction(s): safe-escrow.test.near.release
@@ -408,6 +459,7 @@ invisible characters and for the line cap, including concurrent writes next to a
   verdict is only as good as the allowlisted auditor who published it, and it covers one exact wasm hash.
 - **A clean verdict is "no known rule fired", not "safe".** See the scanner's limits in the root README.
 - The total deposit cap lives in memory and resets when the process restarts.
+- **The chain-fact check (`mutability`) sees keys and hashes, nothing more.** Zero full-access keys does not mean the code is fixed (a contract can upgrade itself through a method), and it cannot tell when the code last changed before the first approval. A pin is as old as the store that holds it: in memory it resets when the process restarts.
 - `checkContract` answers `allow` for an account that does not exist or has no code (nothing to audit); `guardedCall` still refuses such a call.
 
 ### Global contracts

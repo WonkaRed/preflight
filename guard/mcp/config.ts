@@ -1,11 +1,11 @@
 // What the operator hands the server, read once at startup. The read-only tool needs nothing. The guarded call tool exists
 // only when the operator names a key directory AND a policy file: either alone is a mistake, not a smaller grant.
 import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { KeyPairSigner, teraToGas, type Signer } from "near-api-js";
 import * as z from "zod/v4";
 import { DEFAULT_DEPLOYMENT, DEFAULT_TESTNET_RPC, keyPath, loadDeployment, readSecretKey } from "../demo/testnet-deployment.ts";
-import { GuardedAgent } from "../src/index.ts";
+import { CodePins, GuardedAgent, type MutabilityConfig } from "../src/index.ts";
 import { describeError, printable } from "../src/text.ts";
 import { accountId, testnetAccountId, yoctoNear, type Network } from "./schemas.ts";
 
@@ -29,9 +29,14 @@ export interface ServerConfig {
   testnetRegistry: string;
   /** The only registry a mainnet check asks; absent unless the operator names one, and then mainnet checks are refused. */
   mainnetRegistry?: string;
+  /** The chain-fact checks (keys, pinned code hash) per network; absent unless the operator turned them on. */
+  mutability?: Readonly<Record<Network, MutabilityConfig>>;
   /** Present only when the operator enabled guarded calls. */
   call?: CallConfig;
 }
+
+/** PREFLIGHT_MCP_MUTABILITY: the key fact alone, or the key fact and a pinned code hash that warns or blocks on a change. */
+const MUTABILITY_MODES: Readonly<Record<string, Pick<MutabilityConfig, "onCodeChange">>> = { keys: {}, "pin-warn": { onCodeChange: "warn" }, "pin-block": { onCodeChange: "block" } };
 
 const policyFile = z.strictObject({
   accountId: testnetAccountId,
@@ -94,7 +99,26 @@ async function readSigners(keysDir: string, contracts: readonly string[]): Promi
   return signers;
 }
 
-function callConfig(policy: PolicyFile, signers: ReadonlyMap<string, Signer>, policyPath: string, rpc: string, registryId: string): CallConfig {
+/**
+ * PREFLIGHT_MCP_MUTABILITY (`keys`, `pin-warn` or `pin-block`; unset leaves the checks off) and, for a pin mode,
+ * PREFLIGHT_MCP_PINS: an absolute directory holding `testnet.json` and `mainnet.json`, so approvals survive a restart (without
+ * it they last as long as the process). Pins are per network: one account id can exist on both. One server process per directory.
+ */
+async function readMutability(env: NodeJS.ProcessEnv): Promise<ServerConfig["mutability"]> {
+  // A variable that is set but empty is a mistake, not "off" and not "in memory": it fails the start.
+  const mode = env["PREFLIGHT_MCP_MUTABILITY"];
+  const pinsDir = env["PREFLIGHT_MCP_PINS"];
+  if (mode !== undefined && !Object.hasOwn(MUTABILITY_MODES, mode)) throw new Error("PREFLIGHT_MCP_MUTABILITY must be keys, pin-warn or pin-block");
+  const setting = mode === undefined ? undefined : MUTABILITY_MODES[mode];
+  if (pinsDir !== undefined && setting?.onCodeChange === undefined) throw new Error("PREFLIGHT_MCP_PINS needs PREFLIGHT_MCP_MUTABILITY set to pin-warn or pin-block");
+  if (pinsDir !== undefined && !isAbsolute(pinsDir)) throw new Error("PREFLIGHT_MCP_PINS must be an absolute path: a relative one would follow the host's working directory");
+  if (setting === undefined) return undefined;
+  const forNetwork = async (network: Network): Promise<MutabilityConfig> =>
+    setting.onCodeChange === undefined ? {} : { ...setting, pins: await CodePins.open(pinsDir === undefined ? undefined : join(pinsDir, `${network}.json`)) };
+  return { testnet: await forNetwork("testnet"), mainnet: await forNetwork("mainnet") };
+}
+
+function callConfig(policy: PolicyFile, signers: ReadonlyMap<string, Signer>, policyPath: string, rpc: string, registryId: string, mutability: MutabilityConfig | undefined): CallConfig {
   const logPath = resolve(dirname(policyPath), policy.logPath ?? DEFAULT_LOG_NAME);
   const agent = new GuardedAgent({
     accountId: policy.accountId,
@@ -103,7 +127,7 @@ function callConfig(policy: PolicyFile, signers: ReadonlyMap<string, Signer>, po
       if (signer === undefined) throw new Error(`no key is loaded for ${contractId}`);
       return signer;
     },
-    guard: { rpcUrl: rpc, registryId },
+    guard: { rpcUrl: rpc, registryId, ...(mutability && { mutability }) },
     policy: { allowedContracts: policy.allowedContracts, maxDepositPerCall: BigInt(policy.maxDepositPerCall), maxTotalDeposit: BigInt(policy.maxTotalDeposit) },
     logPath,
   });
@@ -124,10 +148,12 @@ export async function loadServerConfig(env: NodeJS.ProcessEnv): Promise<ServerCo
   const policyPath = env["PREFLIGHT_MCP_POLICY"];
   if (!keysDir !== !policyPath) throw new Error("set both PREFLIGHT_MCP_KEYS (key directory) and PREFLIGHT_MCP_POLICY (policy file) to enable guarded calls, or neither");
 
+  const mutability = await readMutability(env);
   const policy = policyPath ? await readPolicy(policyPath) : undefined;
   const testnetRegistry = policy?.registryId ?? (await loadDeployment(DEFAULT_DEPLOYMENT)).accounts["registry"];
   if (testnetRegistry === undefined) throw new Error("the testnet deployment record names no registry");
-  if (policy === undefined || !keysDir || !policyPath) return { rpc, testnetRegistry, ...(mainnetRegistry && { mainnetRegistry }) };
+  const common = { rpc, testnetRegistry, ...(mainnetRegistry && { mainnetRegistry }), ...(mutability && { mutability }) };
+  if (policy === undefined || !keysDir || !policyPath) return common;
   const signers = await readSigners(keysDir, policy.allowedContracts);
-  return { rpc, testnetRegistry, ...(mainnetRegistry && { mainnetRegistry }), call: callConfig(policy, signers, policyPath, rpc.testnet, testnetRegistry) };
+  return { ...common, call: callConfig(policy, signers, policyPath, rpc.testnet, testnetRegistry, mutability?.testnet) };
 }

@@ -47,6 +47,8 @@ export interface Options {
   policy?: Record<string, unknown>;
   /** The operator's mainnet registry (PREFLIGHT_MAINNET_REGISTRY); none by default. */
   mainnetRegistry?: string;
+  /** More environment for the server (PREFLIGHT_MCP_MUTABILITY and the like), over the harness's own. */
+  env?: NodeJS.ProcessEnv;
 }
 
 /** The operator's side: one key file per allowed contract and a policy file in `dir`; returns the environment that names them and the keys. */
@@ -79,12 +81,13 @@ export function demoChain(registryId: string): FakeNear {
   return chain;
 }
 
-export async function startHarness({ keys = false, policy = {}, mainnetRegistry }: Options = {}): Promise<Harness> {
+export async function startHarness({ keys = false, policy = {}, mainnetRegistry, env: extraEnv = {} }: Options = {}): Promise<Harness> {
   const testnet = demoChain(REGISTRY);
   const mainnet = new FakeNear("registry.near");
   mainnet.chainId = "mainnet";
   const env: NodeJS.ProcessEnv = { PREFLIGHT_TESTNET_RPC: await testnet.start(), PREFLIGHT_MAINNET_RPC: await mainnet.start() };
   if (mainnetRegistry !== undefined) env["PREFLIGHT_MAINNET_REGISTRY"] = mainnetRegistry;
+  Object.assign(env, extraEnv);
 
   const dir = await makeTempDir("mcp-test");
   const secrets: string[] = [];

@@ -140,3 +140,47 @@ describe("preflight_check_contract input", () => {
     });
   }
 });
+
+describe("preflight_check_contract with the chain-fact checks on", () => {
+  let on: Harness;
+  beforeEach(async () => {
+    on = await startHarness({ env: { PREFLIGHT_MCP_MUTABILITY: "pin-warn" } });
+  });
+  afterEach(async () => {
+    await on.close();
+  });
+
+  it("tells the host the truth about itself: it keeps a local record, so it is not read-only, and the description says so", async () => {
+    const tool = (await on.client.listTools()).tools.find((candidate) => candidate.name === "preflight_check_contract");
+    assert.equal(tool?.annotations?.readOnlyHint, false);
+    assert.match(tool?.description ?? "", /records the code hash in the operator's pin store/);
+    assert.doesNotMatch(tool?.description ?? "", /^Read-only/);
+    const keysOnly = await startHarness({ env: { PREFLIGHT_MCP_MUTABILITY: "keys" } });
+    try {
+      const plain = (await keysOnly.client.listTools()).tools.find((candidate) => candidate.name === "preflight_check_contract");
+      assert.equal(plain?.annotations?.readOnlyHint, true, "keys mode records nothing");
+      assert.match(plain?.description ?? "", /^Read-only, needs no key\./);
+    } finally {
+      await keysOnly.close();
+    }
+    const off = (await h.client.listTools()).tools.find((candidate) => candidate.name === "preflight_check_contract");
+    assert.equal(off?.annotations?.readOnlyHint, true);
+    assert.match(off?.description ?? "", /^Read-only, needs no key\./);
+  });
+
+  it("says a key holder can replace unaudited code, on the same decision and output shape", async () => {
+    on.testnet.addKey(UNAUDITED, "ed25519:6E8sCci9badyRkXb3JoRpBj5p8C6Tw41ELDZoiihKEtp", "FullAccess");
+    const reply = await on.call("preflight_check_contract", { account_id: UNAUDITED });
+    assert.equal(reply.data?.["decision"], "warn");
+    assert.match((reply.data?.["reasons"] as string[]).join(), /code at this address can be replaced by a key holder at any time \(1 full-access key\)/);
+  });
+
+  it("pins audited code at the first allow and warns when it changes, on testnet only", async () => {
+    assert.equal((await on.call("preflight_check_contract", { account_id: AUDITED })).data?.["decision"], "allow");
+    on.testnet.accounts.set(AUDITED, { wasm: fakeWasm("replacement") });
+    on.testnet.publish(AUDITED, "Safe");
+    const changed = await on.call("preflight_check_contract", { account_id: AUDITED });
+    assert.equal(changed.data?.["decision"], "warn");
+    assert.match((changed.data?.["reasons"] as string[]).join(), /code changed since you last approved it/);
+  });
+});

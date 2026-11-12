@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import { baseDecode, baseEncode } from "near-api-js";
+import { baseEncode } from "near-api-js";
+import { countFullAccessKeys, pinChangeReason, replaceability, snapshotMutability, stricter, type Mutability, type MutabilityConfig } from "./mutability.ts";
 import { isObject, requireString, rpcQuery, RpcFailure, type JsonObject } from "./rpc.ts";
 import { describeError, printable } from "./text.ts";
-import { isValidAccountId } from "./validate.ts";
+import { isCryptoHash, isValidAccountId } from "./validate.ts";
 import type { Decision, GuardConfig, GuardResult, Verdict, VerdictStatus } from "./types.ts";
 
 /** The `code_hash` NEAR reports for an account without a local contract (32 zero bytes in base58). */
@@ -11,14 +12,6 @@ const NO_CODE_HASH = "11111111111111111111111111111111";
 /** Base58 SHA-256 of the bytes: the form NEAR RPC uses for `code_hash` and the registry uses as its key. */
 export function codeHashOf(wasm: Uint8Array): string {
   return baseEncode(createHash("sha256").update(wasm).digest());
-}
-
-function isCryptoHash(value: string): boolean {
-  try {
-    return baseDecode(value).length === 32;
-  } catch {
-    return false;
-  }
 }
 
 function requireHash(object: JsonObject, key: string, what: string): string {
@@ -33,6 +26,8 @@ interface AccountClaims {
   expectedHash: string | null;
   /** The account claims to have code, even if it names no hash (a global contract by publisher account id). */
   claimsCode: boolean;
+  /** The publisher of the global contract the account follows by publisher id (replaceable by that publisher), if it does. */
+  globalPublisher: string | null;
 }
 
 /** Null when the account does not exist. Throws RpcFailure on anything unexpected. */
@@ -56,7 +51,7 @@ async function viewAccount(contractId: string, config: GuardConfig): Promise<Acc
     throw new RpcFailure("view_account reports both a local code_hash and a global contract");
   }
   const expectedHash = globalHash ?? (localHash === NO_CODE_HASH ? null : localHash);
-  return { expectedHash, claimsCode: expectedHash !== null || globalPublisher !== null };
+  return { expectedHash, claimsCode: expectedHash !== null || globalPublisher !== null, globalPublisher };
 }
 
 function optionalString(object: JsonObject, key: string): string | null {
@@ -168,50 +163,93 @@ function describe(verdict: Verdict): string {
 /**
  * `checkContract` before the text of its reasons is made printable: for callers, like the wrapper, that hand the
  * reasons to something that sanitizes them itself (the decision log), so text is escaped exactly once.
- * Throws only for an invalid `contractId`.
+ * Throws only for an invalid `contractId` or an invalid `config.mutability`.
  */
 export async function inspectContract(contractId: string, config: GuardConfig): Promise<GuardResult> {
   if (!isValidAccountId(contractId)) throw new TypeError(`invalid NEAR account id: ${printable(describeError(contractId))}`);
+  const mutability = snapshotMutability(config.mutability);
 
-  const result = (decision: Decision, reason: string, codeHash: string | null = null, verdict: Verdict | null = null): GuardResult => ({
+  const result = (decision: Decision, reasons: string[], codeHash: string | null = null, verdict: Verdict | null = null): GuardResult => ({
     decision,
     contractId,
     codeHash,
     verdict,
-    reasons: [reason],
+    reasons,
   });
 
   let codeHash: string | null = null;
   try {
     const claims = await viewAccount(contractId, config);
-    if (claims === null) return result("allow", "account does not exist; no contract code to audit");
+    if (claims === null) return result("allow", ["account does not exist; no contract code to audit"]);
     codeHash = await verifiedCodeHash(contractId, claims, config);
-    if (codeHash === null) return result("allow", "account has no contract code; nothing to audit");
+    if (codeHash === null) return result("allow", ["account has no contract code; nothing to audit"]);
     const verdict = await lookupVerdict(codeHash, config);
-    if (verdict === null) {
-      return result("warn", `code hash ${codeHash} has no verdict in the registry: unaudited code, or code changed since its audit`, codeHash);
-    }
-    switch (verdict.status) {
-      case "Unsafe":
-        return result("block", describe(verdict), codeHash, verdict);
-      case "Warn":
-        return result("warn", describe(verdict), codeHash, verdict);
-      case "Safe":
-        return result("allow", describe(verdict), codeHash, verdict);
-    }
+    const { decision, reason } = verdictOutcome(verdict, codeHash);
+    if (mutability === undefined) return result(decision, [reason], codeHash, verdict);
+    const extra = await mutabilityOutcome(contractId, claims, codeHash, verdict, mutability, config);
+    return result(stricter(decision, extra.decision), [reason, ...extra.reasons], codeHash, verdict);
   } catch (error) {
     // Fail closed on every failure, including bugs: an unreadable answer is never an `allow`.
-    return result("block", `could not verify ${contractId}: ${describeError(error)}`, codeHash);
+    return result("block", [`could not verify ${contractId}: ${describeError(error)}`], codeHash);
   }
+}
+
+const STATUS_DECISION: Record<VerdictStatus, Decision> = { Unsafe: "block", Warn: "warn", Safe: "allow" };
+
+/** The registry's answer as a decision and its reason. */
+function verdictOutcome(verdict: Verdict | null, codeHash: string): { decision: Decision; reason: string } {
+  if (verdict === null) return { decision: "warn", reason: `code hash ${codeHash} has no verdict in the registry: unaudited code, or code changed since its audit` };
+  return { decision: STATUS_DECISION[verdict.status], reason: describe(verdict) };
+}
+
+/**
+ * What the chain's own facts add to a registry answer (`GuardConfig.mutability`). Code with no verdict says who can replace
+ * it; code that differs from the pinned hash is held for a human, or blocked. Neither lowers a decision.
+ */
+async function mutabilityOutcome(contractId: string, claims: AccountClaims, codeHash: string, verdict: Verdict | null, mutability: MutabilityConfig, config: GuardConfig): Promise<{ decision: Decision; reasons: string[] }> {
+  const reasons: string[] = [];
+  let decision: Decision = "allow";
+  if (verdict === null) {
+    reasons.push(replaceability({ fullAccessKeys: await countFullAccessKeys(contractId, config), globalPublisher: claims.globalPublisher }), "the guard cannot see whether the contract upgrades itself through a method");
+  }
+  const changed = pinChangeReason(mutability.pins?.get(contractId), codeHash);
+  if (changed !== null) {
+    reasons.push(changed);
+    decision = mutability.onCodeChange ?? "warn";
+  }
+  return { decision, reasons };
+}
+
+/**
+ * The mutability facts of an account, read from the chain: null when the account does not exist. Throws RpcFailure when
+ * the node's answers cannot be used. It reads `view_account` and `view_access_key_list` only, not the code itself.
+ */
+export async function readMutability(contractId: string, config: GuardConfig): Promise<Mutability | null> {
+  if (!isValidAccountId(contractId)) throw new TypeError(`invalid NEAR account id: ${printable(describeError(contractId))}`);
+  const claims = await viewAccount(contractId, config);
+  if (claims === null) return null;
+  return { accountId: contractId, codeHash: claims.expectedHash, globalPublisher: claims.globalPublisher, fullAccessKeys: await countFullAccessKeys(contractId, config) };
 }
 
 /**
  * Decides whether an agent may call or pay `contractId`: reads the deployed code over RPC, hashes it and looks
  * the hash up in the registry. Fails closed: network and registry failures are `block`, never an exception.
- * Throws only for an invalid `contractId`. The reasons are safe to print: every unsafe character is escaped.
+ * With `config.mutability.pins`, an `allow` pins the hash it allowed, and a pin that cannot be saved is a `block`.
+ * Throws only for an invalid `contractId` or an invalid `config.mutability`. The reasons are safe to print: every unsafe character is escaped.
  */
 export async function checkContract(contractId: string, config: GuardConfig): Promise<GuardResult> {
-  return sanitizedResult(await inspectContract(contractId, config));
+  const mutability = snapshotMutability(config.mutability);
+  const checked: GuardConfig = { ...config, ...(mutability !== undefined && { mutability }) };
+  const pins = mutability?.pins;
+  const pinnedBefore = pins?.get(contractId);
+  const inspected = await inspectContract(contractId, checked);
+  if (pins === undefined || inspected.decision !== "allow" || inspected.codeHash === null) return sanitizedResult(inspected);
+  try {
+    await pins.set(contractId, inspected.codeHash, pinnedBefore);
+  } catch (error) {
+    return sanitizedResult({ ...inspected, decision: "block", reasons: [...inspected.reasons, describeError(error)] });
+  }
+  return sanitizedResult(inspected);
 }
 
 /** The result with its reasons made printable. Apply it to a result that has not been through it yet. */

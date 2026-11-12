@@ -1,5 +1,6 @@
 // Grammars for the identifiers that cross the guard's boundary. Everything that reaches the policy, the log, an RPC
 // request or a signature has passed one of these first, so those layers never see control characters or giants.
+import { baseDecode } from "near-api-js";
 
 // Account id grammar from the NEAR docs and the near-account-id crate: 2 to 64 characters, lowercase letters
 // and digits, with single `.`, `-`, `_` separators that cannot start, end or repeat.
@@ -32,3 +33,12 @@ export function isValidMethodName(method: string): boolean {
  */
 export const MAX_DEPOSIT = 2n ** 128n - 1n;
 export const MAX_GAS = 2n ** 64n - 1n;
+
+/** Whether `value` is a base58 string of 32 bytes: the form of every code hash NEAR RPC reports. */
+export function isCryptoHash(value: string): boolean {
+  try {
+    return baseDecode(value).length === 32;
+  } catch {
+    return false;
+  }
+}

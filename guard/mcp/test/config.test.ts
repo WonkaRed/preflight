@@ -40,6 +40,40 @@ describe("loadServerConfig", () => {
     await rejects({ PREFLIGHT_MAINNET_REGISTRY: "Not A Registry" }, /PREFLIGHT_MAINNET_REGISTRY must be a NEAR account id/);
   });
 
+  it("leaves the chain-fact checks off unless the operator names a mode, and takes only the modes it knows", async () => {
+    assert.equal((await loadServerConfig({})).mutability, undefined);
+    assert.deepEqual((await loadServerConfig({ PREFLIGHT_MCP_MUTABILITY: "keys" })).mutability, { testnet: {}, mainnet: {} });
+    const pinned = (await loadServerConfig({ PREFLIGHT_MCP_MUTABILITY: "pin-block" })).mutability;
+    assert.equal(pinned?.testnet.onCodeChange, "block");
+    assert.notEqual(pinned?.testnet.pins, pinned?.mainnet.pins, "pins are per network");
+    assert.equal((await loadServerConfig({ PREFLIGHT_MCP_MUTABILITY: "pin-warn" })).mutability?.mainnet.onCodeChange, "warn");
+    await rejects({ PREFLIGHT_MCP_MUTABILITY: "everything" }, /PREFLIGHT_MCP_MUTABILITY must be keys, pin-warn or pin-block/);
+    await rejects({ PREFLIGHT_MCP_MUTABILITY: "toString" }, /PREFLIGHT_MCP_MUTABILITY must be/);
+  });
+
+  it("keeps pins in a directory when the operator names one, and refuses a pin directory with no pin mode", async () => {
+    const pinsDir = join(dir, "pins");
+    const env = { PREFLIGHT_MCP_MUTABILITY: "pin-warn", PREFLIGHT_MCP_PINS: pinsDir };
+    const first = (await loadServerConfig(env)).mutability;
+    await first?.testnet.pins?.set("a.testnet", "Bvocsc7xBZmcjwLLNJbLBJpvV5SqcWKsT6fNZZGKySTj", undefined);
+    first?.testnet.pins?.close();
+    first?.mainnet.pins?.close();
+    const second = (await loadServerConfig(env)).mutability;
+    assert.equal(second?.testnet.pins?.get("a.testnet"), "Bvocsc7xBZmcjwLLNJbLBJpvV5SqcWKsT6fNZZGKySTj");
+    assert.equal(second?.mainnet.pins?.get("a.testnet"), undefined);
+    await rejects(env, /pin file lock .* is held by process \d+: one process per pin file/);
+    second?.testnet.pins?.close();
+    second?.mainnet.pins?.close();
+    await rejects({ PREFLIGHT_MCP_PINS: pinsDir }, /PREFLIGHT_MCP_PINS needs PREFLIGHT_MCP_MUTABILITY/);
+    await rejects({ PREFLIGHT_MCP_MUTABILITY: "keys", PREFLIGHT_MCP_PINS: pinsDir }, /PREFLIGHT_MCP_PINS needs/);
+  });
+
+  it("refuses a relative pin directory, and a variable that is set but empty, instead of reading it as off or in memory", async () => {
+    await rejects({ PREFLIGHT_MCP_MUTABILITY: "pin-warn", PREFLIGHT_MCP_PINS: "pins" }, /PREFLIGHT_MCP_PINS must be an absolute path/);
+    await rejects({ PREFLIGHT_MCP_MUTABILITY: "pin-warn", PREFLIGHT_MCP_PINS: "" }, /PREFLIGHT_MCP_PINS must be an absolute path/);
+    await rejects({ PREFLIGHT_MCP_MUTABILITY: "" }, /PREFLIGHT_MCP_MUTABILITY must be keys, pin-warn or pin-block/);
+  });
+
   it("enables guarded calls with a key directory and a policy, and keeps the log next to the policy by default", async () => {
     const config = await loadServerConfig(await operator());
     assert.deepEqual(config.call?.allowedContracts, ALLOWED);

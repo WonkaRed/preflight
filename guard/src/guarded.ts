@@ -1,6 +1,7 @@
 import { Account, JsonRpcProvider, decodeSignedTransaction, encodeTransaction, type SignedTransaction, type Signer } from "near-api-js";
 import { inspectContract, sanitizedResult } from "./check.ts";
 import { DecisionLog, type LogEntry } from "./log.ts";
+import { snapshotMutability } from "./mutability.ts";
 import { assertAmount, assertValidPolicy, policyViolation, type Policy } from "./policy.ts";
 import { isObject, isValidBackoff, isValidTimeoutMs, MAX_TIMER_MS, rpcQuery, RpcFailure, snapshotBackoff } from "./rpc.ts";
 import { describeError, printable } from "./text.ts";
@@ -298,10 +299,13 @@ export class GuardedAgent {
     // Each property is read once and copied, so neither the owner's later edits nor an object that answers
     // differently the second time can loosen anything mid-run; the copy is what gets validated and kept.
     const { accountId, signer, guard, policy, logPath, approve, approveTimeoutMs, allowFullAccessKey, now } = options;
+    const guardCopy: GuardConfig = { ...guard, ...(guard.rateLimitBackoffMs !== undefined && { rateLimitBackoffMs: snapshotBackoff(guard.rateLimitBackoffMs) }) };
+    // `guardCopy` already holds the one read of each property, so its `mutability` is stable and is what gets checked and copied.
+    if (guardCopy.mutability !== undefined) guardCopy.mutability = snapshotMutability(guardCopy.mutability);
     const copy: GuardedAgentOptions = {
       accountId,
       signer,
-      guard: { ...guard, ...(guard.rateLimitBackoffMs !== undefined && { rateLimitBackoffMs: snapshotBackoff(guard.rateLimitBackoffMs) }) },
+      guard: guardCopy,
       policy: { ...policy, allowedContracts: [...policy.allowedContracts] },
       logPath,
       ...(approve !== undefined && { approve }),
@@ -342,6 +346,8 @@ export class GuardedAgent {
       const { publicKey, problem } = await keyProblem(this.#options, signer, request);
       if (problem !== null) throw new Refusal("block", [problem], null);
 
+      const pins = config.mutability?.pins;
+      const pinnedBefore = pins?.get(request.contractId);
       const inspected = await inspectContract(request.contractId, config);
       ({ decision, codeHash } = inspected);
       reasons = inspected.reasons;
@@ -359,6 +365,8 @@ export class GuardedAgent {
         if (!answer.approved) throw new Refusal("warn", reasons, codeHash);
       }
 
+      // What the approver or the registry just allowed is the code the next check compares against; a pin that cannot be saved stops the call here.
+      await pins?.set(request.contractId, codeHash, pinnedBefore);
       await this.#record(request, decision, "approved", reasons, codeHash);
       approvedLogged = true;
       const account = new ReportingAccount(this.#options.accountId, new JsonRpcProvider({ url: config.rpcUrl }), signer, async (signed) => {

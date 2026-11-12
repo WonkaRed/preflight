@@ -17,6 +17,8 @@
     "scope-key": "node --disable-warning=ExperimentalWarning scripts/scope-key.ts",
     "testnet-deploy": "node --disable-warning=ExperimentalWarning scripts/testnet-deploy.ts",
     "testnet-verify": "node --disable-warning=ExperimentalWarning scripts/testnet-verify.ts",
+    "mutability-check": "node --disable-warning=ExperimentalWarning scripts/mutability-check.ts",
+    "mainnet-survey": "node --disable-warning=ExperimentalWarning scripts/mainnet-survey.ts",
     "testnet-demo": "node --disable-warning=ExperimentalWarning demo/testnet-demo.ts",
     "testnet-demo-llm": "node --disable-warning=ExperimentalWarning demo/testnet-llm-demo.ts",
     "mcp": "node --disable-warning=ExperimentalWarning mcp/main.ts",

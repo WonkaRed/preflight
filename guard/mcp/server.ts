@@ -48,19 +48,21 @@ export function createPreflightServer(config: ServerConfig): McpServer {
       }
     };
 
+  // In a pin mode a check that allows a contract records its code hash in the operator's pin store: local state, nothing on chain.
+  const pinning = config.mutability !== undefined && Object.values(config.mutability).some((setting) => setting.pins !== undefined);
   server.registerTool(
     "preflight_check_contract",
     {
       title: "Check a contract against the Preflight registry",
-      description: "Read-only, needs no key. Reads the contract code deployed at a NEAR account right now, hashes it, and asks the operator's Preflight registry (never one you name) what an auditor said about that exact code. Returns allow (audited safe), warn (no verdict for this code, or the auditor warned: ask a human first) or block (audited unsafe, or the code could not be verified: do not call it), with the code hash, the registry verdict and auditor, the rule ids and the reasons.",
+      description: `${pinning ? "Needs no key and changes nothing on chain, but when it allows a contract it records the code hash in the operator's pin store, so a later change is noticed." : "Read-only, needs no key."} Reads the contract code deployed at a NEAR account right now, hashes it, and asks the operator's Preflight registry (never one you name) what an auditor said about that exact code. Returns allow (audited safe), warn (no verdict for this code, or the auditor warned: ask a human first) or block (audited unsafe, or the code could not be verified: do not call it), with the code hash, the registry verdict and auditor, the rule ids and the reasons. If the operator enabled the chain-fact checks, the reasons also say whether a full-access key can replace the code at this address (an address alone does not pin its code) and whether the code changed since it was last approved.`,
       inputSchema: checkInput,
       outputSchema: checkOutput,
-      annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+      annotations: { readOnlyHint: !pinning, idempotentHint: true, openWorldHint: true },
     },
     safely(async ({ account_id, network }) => {
       const registryId = network === "testnet" ? config.testnetRegistry : config.mainnetRegistry;
       if (registryId === undefined) return fail("the operator has configured no registry for mainnet, so mainnet cannot be checked");
-      const { decision, codeHash, verdict, reasons } = await checkContract(account_id, { rpcUrl: config.rpc[network], registryId });
+      const { decision, codeHash, verdict, reasons } = await checkContract(account_id, { rpcUrl: config.rpc[network], registryId, ...(config.mutability && { mutability: config.mutability[network] }) });
       const output: CheckOutput = {
         decision,
         account_id,

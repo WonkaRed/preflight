@@ -124,6 +124,18 @@ Other environment: `PREFLIGHT_TESTNET_RPC` and `PREFLIGHT_MAINNET_RPC` (default 
 `https://free.rpc.fastnear.com`; a URL with a user name or password in it is refused at startup, so put no credential there),
 and `PREFLIGHT_MAINNET_REGISTRY` (a mainnet registry account id; none by default, so mainnet checks are refused).
 
+`PREFLIGHT_MCP_MUTABILITY` turns on the checks that need no auditor (guard README, "Who can replace the code"): `keys` adds to a
+check with no registry verdict whether a full-access key can replace the code; `pin-warn` and `pin-block` also remember the code
+hash of every contract a check allows (or a guarded call signs for) and hold or refuse it when it changes. Unset, they are off.
+`PREFLIGHT_MCP_PINS` is an absolute directory (a pin mode only; a relative path or an empty value stops the start, because it would follow the host's working directory) that keeps `testnet.json`
+and `mainnet.json` across restarts; pins are per network, and without it they last as long as the process. Run one server process per pin
+directory: a lock file beside each pin file makes a second process refuse to start. In a pin mode `preflight_check_contract` is
+no longer read-only: when it allows a contract it records the code hash in the pin store (nothing on chain), and the tool's
+description and `readOnlyHint` say so. To accept a changed contract, stop the server, delete that account's entry from the pin file and
+start it again (a running server keeps its pins in memory and would write the entry back). `pin-warn` and `pin-block` behave the same for
+`preflight_guarded_call`: the MCP agent has no approver, so a `warn` is refused either way, and the difference shows only in the
+decision (`warn` or `block`) a check reports. The facts arrive in the `reasons` of both tools; no output field was added.
+
 The demo shops' keys are not in this repository, so against the recorded deployment only the checks run; to try guarded calls
 use a deployment of your own (`npm run testnet-deploy`).
 

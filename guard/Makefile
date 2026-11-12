@@ -1,4 +1,4 @@
-.PHONY: build test demo demo-llm demo-llm-replay testnet-verify testnet-demo testnet-demo-llm mcp-check
+.PHONY: build test demo demo-llm demo-llm-replay testnet-verify mutability-check mainnet-survey testnet-demo testnet-demo-llm mcp-check
 
 # Node >= 22.22.2 (see package.json "engines"; .npmrc makes npm refuse an older Node). Dependencies are
 # installed from the lockfile whenever it changes: the first run needs network access.
@@ -30,6 +30,17 @@ demo-llm-replay: node_modules/.package-lock.json
 # Read-only check of the recorded testnet deployment against the chain. Needs network, no keys.
 testnet-verify: node_modules/.package-lock.json
 	npm run --silent testnet-verify
+
+# Who can replace the code at a testnet account (default chameleon.preflight-guard.testnet), from chain facts alone. Needs network, no keys.
+# make -C guard mutability-check ACCOUNTS="a.testnet b.testnet" checks others.
+# The value travels in the environment, never spliced into the shell command.
+mutability-check: export MUTABILITY_ACCOUNTS := $(ACCOUNTS)
+mutability-check: node_modules/.package-lock.json
+	npm run --silent mutability-check -- $${MUTABILITY_ACCOUNTS}
+
+# Rewrites docs/mainnet-survey.md from a read-only look at well-known mainnet contracts. Needs network, no keys, sends nothing.
+mainnet-survey: node_modules/.package-lock.json
+	npm run --silent mainnet-survey
 
 # The attack scenario against the deployed testnet contracts, with real transactions. Needs the agent's key files:
 # make -C guard testnet-demo AGENT_KEYS=/path/to/dir (the directory holds agent-key-for-<shop>.key).

@@ -1,4 +1,5 @@
 // Interface from SPEC.md section 7 ("Guard") and the registry's Verdict from section 6.
+import type { MutabilityConfig } from "./mutability.ts";
 
 export type Decision = "allow" | "warn" | "block";
 
@@ -28,6 +29,12 @@ export interface GuardConfig {
    * 4000; at most 10 entries; `[]` never retries), all within `timeoutMs`. Still rate limited after the last one is a `block`.
    */
   rateLimitBackoffMs?: readonly number[];
+  /**
+   * Off by default. Turns on the checks that need no auditor: a contract with no registry verdict says whether a
+   * full-access key can replace its code, and `pins` blocks or warns when the code differs from the one approved before.
+   * It adds one RPC read (`view_access_key_list`) to a check that finds no verdict.
+   */
+  mutability?: MutabilityConfig;
 }
 
 export interface GuardResult {

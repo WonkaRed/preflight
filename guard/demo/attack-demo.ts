@@ -2,6 +2,7 @@
 // Optional first argument: where to write the JSON-lines decision log (default demo-output/decisions.jsonl).
 import { KeyPair, KeyPairSigner, type Signer } from "near-api-js";
 import { FakeNear, fakeWasm } from "../testkit/fake-rpc.ts";
+import { CodePins } from "../src/index.ts";
 import { printable } from "../src/text.ts";
 import { runScenario, type DemoEnv } from "./scenario.ts";
 
@@ -28,11 +29,14 @@ for (const contractId of Object.values(contracts)) {
   signers.set(contractId, signer);
 }
 
+// Whoever swapped the code held a full-access key; the guard's chain-fact check names that to the approver.
+chain.addKey(contracts.swapped, (await new KeyPairSigner(KeyPair.fromRandom("ed25519")).getPublicKey()).toString(), "FullAccess");
+
 const rpcUrl = await chain.start();
 let exitCode = 0;
 try {
   const env: DemoEnv = {
-    guard: { rpcUrl, registryId: REGISTRY, timeoutMs: 5_000 },
+    guard: { rpcUrl, registryId: REGISTRY, timeoutMs: 5_000, mutability: { pins: await CodePins.open() } },
     agentId: AGENT,
     contracts,
     drainId: "drain.test.near",

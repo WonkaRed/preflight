@@ -42,7 +42,7 @@ try {
 
   const patched = shop("patched");
   const env: DemoEnv = {
-    guard: { rpcUrl: rpc, registryId: accounts["registry"] ?? "", timeoutMs: 20_000 },
+    guard: { rpcUrl: rpc, registryId: accounts["registry"] ?? "", timeoutMs: 20_000, mutability: {} },
     agentId: accounts["agent"] ?? "",
     contracts: { safe: patched, unsafe: shop("vulnerable"), swapped: shop("swapped") },
     drainId: `drain.${deployment.parent}`,
