@@ -16,7 +16,7 @@ CONTRACTS := chameleon_vulnerable chameleon_patched swap_switch
 # Its own target dir, so the remapped build never rebuilds what the other workspaces share.
 TARGET := $(abspath target)
 
-.PHONY: build reports test check watchdog
+.PHONY: build reports test check watchdog idle-reset
 
 build:
 	RUSTFLAGS='$(WASM_FLAGS)' CARGO_TARGET_DIR='$(TARGET)' cargo build --locked --release --target wasm32-unknown-unknown -p chameleon-vulnerable -p chameleon-patched -p swap-switch
@@ -40,3 +40,7 @@ check:
 # One status line for the money (spare balances, flip allowance) and the repairs; needs PREFLIGHT_TESTNET_KEYS to repair.
 watchdog:
 	npm run --silent watchdog
+
+# Puts the chameleon back on the vulnerable build when it has been on the patched build for 10 idle minutes; needs PREFLIGHT_TESTNET_KEYS.
+idle-reset:
+	npm run --silent idle-reset

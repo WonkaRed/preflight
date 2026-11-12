@@ -13,7 +13,8 @@
     "flip": "node --disable-warning=ExperimentalWarning scripts/flip.ts",
     "record": "node --disable-warning=ExperimentalWarning scripts/record.ts",
     "check": "node --disable-warning=ExperimentalWarning scripts/check.ts",
-    "watchdog": "node --disable-warning=ExperimentalWarning scripts/watchdog.ts"
+    "watchdog": "node --disable-warning=ExperimentalWarning scripts/watchdog.ts",
+    "idle-reset": "node --disable-warning=ExperimentalWarning scripts/idle-reset.ts"
   },
   "dependencies": {
     "near-api-js": "7.4.0"

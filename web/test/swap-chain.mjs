@@ -18,16 +18,20 @@ export const CONFIG = {
 const WASM = { vulnerable: new TextEncoder().encode('demo vulnerable build'), patched: new TextEncoder().encode('demo patched build') };
 export const HASH = Object.fromEntries(Object.entries(WASM).map(([name, wasm]) => [name, base58Encode(createHash('sha256').update(wasm).digest())]));
 /** `switch.status()` as the contract returns it (demo/swap/switch/src/lib.rs, `Status`). */
-export const status = (flips, nextFlipMs, hashes = HASH) => ({
-  chameleon: 'chameleon.example.testnet', live: 'vulnerable', flips, last_flip_ms: 0, min_interval_ms: 10_000, next_flip_ms: nextFlipMs,
+export const status = (flips, nextFlipMs, hashes = HASH, live = 'vulnerable', lastFlipMs = 0) => ({
+  chameleon: 'chameleon.example.testnet', live, flips, last_flip_ms: lastFlipMs, min_interval_ms: 10_000, next_flip_ms: nextFlipMs,
   vulnerable: { code_hash: hashes.vulnerable, code_hash_hex: '00', size_bytes: 21 }, patched: { code_hash: hashes.patched, code_hash_hex: '00', size_bytes: 18 },
 });
+const HEIGHT = 1_000_000;
 const utf8 = (value) => [...Buffer.from(JSON.stringify(value))];
+
+/** The `tx` answer for a successful `flip` the switch signed itself (the flip key lives on the switch). */
+export const flipTxResult = { transaction: { signer_id: 'switch.example.testnet', receiver_id: 'switch.example.testnet', actions: [{ FunctionCall: { method_name: 'flip', args: 'e30=', gas: 1, deposit: '0' } }] }, status: { SuccessValue: '' } };
 
 /** `chain.script.<name>` holds per-test misbehavior; `chain.calls` records every request as `{ method, params }`. */
 export function fakeChain() {
   const chain = {
-    build: 'vulnerable', flips: 3, nextFlipMs: 0, minIntervalMs: 10_000, nowMs: 1_800_000_000_000, nonce: 1000,
+    build: 'vulnerable', flips: 3, lastFlipMs: 0, nextFlipMs: 0, minIntervalMs: 10_000, nowMs: 1_800_000_000_000, nonce: 1000,
     verdicts: {
       [HASH.vulnerable]: { code_hash: HASH.vulnerable, status: 'Unsafe', rule_ids: ['PF001'], report_url: 'https://example.com/vulnerable.json', auditor: 'auditor.example.testnet' },
       [HASH.patched]: { code_hash: HASH.patched, status: 'Safe', rule_ids: [], report_url: 'https://example.com/patched.json', auditor: 'auditor.example.testnet' },
@@ -37,6 +41,9 @@ export function fakeChain() {
     sendResult: null, // overrides a successful send_tx result
     txResult: null, // what `tx` (look a transaction up by hash) answers; null is UNKNOWN_TRANSACTION
     upgradeFails: false, // the flip succeeds but the chameleon's upgrade does not: no new code, no count, no countdown
+    // The last swap, for the page to find on chain: blocks come every `blockMs`, the swap ran at `lastFlipMs` (a block's time), and its
+    // transaction is `swapTx`. `skipped` heights are ones the chain never produced; `statusLive` is what the switch says is live.
+    blockMs: 1000, skipped: new Set(), swapTx: null, statusLive: undefined,
     down: false, accessKeyError: null, statusOverride: undefined, codeOverride: undefined,
     calls: [],
     taken: new Set(),
@@ -49,7 +56,18 @@ export function fakeChain() {
     chain.calls.push({ url, method, params });
     if (chain.down) throw new TypeError('fetch failed');
     const answer = (() => {
-      if (method === 'block') return { result: { header: { hash: vector.tx.blockHash, timestamp_nanosec: String(BigInt(chain.nowMs) * 1_000_000n) } } };
+      if (method === 'block' && params.block_id !== undefined) {
+        const height = params.block_id;
+        if (chain.skipped.has(height)) return rpcError('UNKNOWN_BLOCK', {});
+        return { result: { header: { height, hash: vector.tx.blockHash, timestamp_nanosec: String(BigInt(chain.nowMs - (HEIGHT - height) * chain.blockMs) * 1_000_000n) } } };
+      }
+      if (method === 'block') return { result: { header: { height: HEIGHT, hash: vector.tx.blockHash, timestamp_nanosec: String(BigInt(chain.nowMs) * 1_000_000n) } } };
+      if (method === 'EXPERIMENTAL_changes') {
+        const ran = HEIGHT - (chain.nowMs - chain.lastFlipMs) / chain.blockMs;
+        const changes = chain.swapTx && params.block_id === ran + (chain.swapTx.blocksLate ?? 0)
+          ? [{ cause: { type: 'receipt_processing', receipt_hash: HASH.patched }, type: 'access_key_update' }, { cause: { type: 'transaction_processing', tx_hash: chain.swapTx.hash }, type: 'access_key_update' }] : [];
+        return { result: { block_hash: vector.tx.blockHash, changes } };
+      }
       if (method === 'send_tx') {
         const error = chain.sendErrors.shift();
         if (error) return { error };
@@ -64,6 +82,7 @@ export function fakeChain() {
         chain.nextFlipMs = chain.nowMs + chain.minIntervalMs;
         return done;
       }
+      if (method === 'tx' && chain.swapTx && params.tx_hash === chain.swapTx.hash) return { result: chain.swapTx.result };
       if (method === 'tx') return chain.txResult ? { result: chain.txResult } : rpcError('UNKNOWN_TRANSACTION', { requested_transaction_hash: params.tx_hash });
       const { request_type: type, account_id: account } = params;
       if (type === 'view_account') {
@@ -78,7 +97,7 @@ export function fakeChain() {
       if (type === 'view_access_key') return chain.accessKeyError ? rpcError(chain.accessKeyError) : { result: { nonce: chain.nonce, permission: 'FullAccess' } };
       if (type === 'call_function' && account === 'switch.example.testnet' && params.method_name === 'status') {
         if (chain.statusOverride !== undefined) return view(chain.statusOverride);
-        return view(status(chain.flips, chain.nextFlipMs));
+        return view(status(chain.flips, chain.nextFlipMs, HASH, chain.statusLive ?? chain.build, chain.lastFlipMs));
       }
       if (type === 'call_function' && account === 'registry.example.testnet' && params.method_name === 'get_verdict') {
         const { code_hash: hash } = JSON.parse(Buffer.from(params.args_base64, 'base64').toString());

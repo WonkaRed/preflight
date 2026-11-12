@@ -211,3 +211,21 @@ A systemd user timer runs the watchdog every 30 minutes (persistent, so a run mi
 - The unit's alert command, which runs when a run exits non-zero, is a placeholder for your own notifier.
 - The watchdog's line is in `journalctl --user -u preflight-swap-watchdog`.
 - The watchdog tops up the switch and the chameleon only from `preflight-guard.testnet`; when its line says the funder has nothing to give, fund that account first.
+
+### The idle reset
+
+The page shows its contrast best when the chameleon is on the vulnerable build (an address check says ALLOW, Preflight says BLOCK). A visitor who swaps it to the patched build and leaves would hand the next visitor ALLOW and ALLOW, so a second timer puts it back. `scripts/idle-reset.ts` (`npm run --silent idle-reset`, or `make -C demo/swap idle-reset`) flips the chameleon to the vulnerable build when all of these hold, and does nothing otherwise:
+
+- the chain reports the patched build's code hash for the chameleon, and the switch records `live: patched` (so a swap is not still landing);
+- the switch's `last_flip_ms` is more than 10 minutes behind the chain's block time (`--idle-minutes <n>` changes the 10).
+
+Safety against a visitor swapping at the same moment: it reads the switch and the chain twice, the second time right before it sends, at optimistic finality, and sends nothing if the second read says there is nothing to do. It sends at most one transaction per run. If a visitor's flip lands between its last read and its own, the switch refuses the second flip as too soon (its 20 s interval), which changes nothing, and the script logs it as skipped. It signs with the public flip key (`<keys dir>/swap-flip-public.key`), so a reset costs gas from that key's allowance (about 0.0027 NEAR, the table above) and nothing else; the watchdog renews the allowance. `--dry-run` reads and prints the decision and needs no key.
+
+It prints one line per run:
+
+```
+swap-idle-reset 2026-11-12T00:13:20.162Z RESET to the vulnerable build | chain=patched recorded=patched last_swap_s_ago=858 flips=34 | tx=6drxotsCrBTmWL4X5vrCcxLnmw5RVjq5wWigiwRf4jJv https://testnet.near.rocks/tx/6drxotsCrBTmWL4X5vrCcxLnmw5RVjq5wWigiwRf4jJv | now: chain=vulnerable recorded=vulnerable last_swap_s_ago=3 flips=35
+swap-idle-reset <time> OK nothing to do | chain=vulnerable recorded=vulnerable last_swap_s_ago=... | the vulnerable build is live
+```
+
+The first word after the time is `RESET`, `OK` (nothing to do, or skipped because a visitor got there first) or `FAIL` (exit 1: the chain could not be read, the key is missing, or the flip failed for another reason). The units are `systemd/preflight-swap-idle-reset.service` and `.timer`; the timer runs the service two minutes after boot and two minutes after each run finished, so a reset happens between 10 and 12 minutes after the last swap. Install: `cp systemd/preflight-swap-idle-reset.* ~/.config/systemd/user/ && systemctl --user daemon-reload && systemctl --user enable --now preflight-swap-idle-reset.timer`; the lines are in `journalctl --user -t swap-idle-reset` (by identifier, not `-u`: journald can lose the unit of a line from a process that exits at once). Same notes as the watchdog: the service points at this checkout and at your key directory. There is no alert command: a failed run shows in `systemctl --user --failed`, and the next run (two minutes later) tries again.

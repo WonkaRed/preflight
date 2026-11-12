@@ -1,0 +1,12 @@
+[Unit]
+Description=Run preflight-swap-idle-reset every 2 minutes
+
+[Timer]
+# Two minutes after boot, then two minutes after each run finished: the reset lands between 10 and 12 minutes after the last swap.
+OnBootSec=2min
+OnUnitInactiveSec=2min
+AccuracySec=10s
+Unit=preflight-swap-idle-reset.service
+
+[Install]
+WantedBy=timers.target

@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { test } from 'node:test';
 import { base58Encode } from '../src/near.js';
 import { ACTIVE_MS, createSwap, IDLE_POLL_MS, parseRecorded, POLL_MS, readConfig } from '../src/swap.js';
-import { CONFIG, fakeChain, HASH, recordedJson, status, UNSET_CONFIG } from './swap-chain.mjs';
+import { CONFIG, fakeChain, flipTxResult, HASH, recordedJson, status, UNSET_CONFIG } from './swap-chain.mjs';
 
 const recorded = parseRecorded(recordedJson);
 
@@ -108,6 +108,118 @@ test('live: a hash that is neither build the switch knows has no build label, an
   await swap.refresh();
   assert.equal(state().build, null);
   assert.equal(state().verdict.decision, 'BLOCK');
+});
+
+// ---- the build that ran here before the last swap --------------------------------------------------------------------
+
+const settle = async (done) => { for (let i = 0; i < 100 && !done(); i++) await new Promise((resolve) => setImmediate(resolve)); };
+const SWAP_TX = base58Encode(createHash('sha256').update('the last swap').digest());
+/** The fixed build is live, the last swap ran `minutes` ago, and its transaction is on chain. */
+function afterSwap(minutes = 5, mutate = () => {}) {
+  const chain = fakeChain();
+  chain.build = 'patched';
+  chain.lastFlipMs = chain.nowMs - minutes * 60_000;
+  chain.swapTx = { hash: SWAP_TX, result: flipTxResult };
+  mutate(chain);
+  return chain;
+}
+
+test('fixed code live after a swap: the other build\'s verdict is read from the registry, with when it was swapped and the swap\'s transaction found on chain', async () => {
+  const chain = afterSwap(5);
+  const { swap, state } = setup(chain);
+  await swap.refresh();
+  assert.deepEqual([state().verdict.decision, state().build], ['ALLOW', 'patched']);
+  const { before } = state();
+  assert.deepEqual([before.build, before.codeHash, before.verdict.decision, before.verdict.ruleIds], ['vulnerable', HASH.vulnerable, 'BLOCK', ['PF001']]);
+  assert.equal(before.swappedAt, chain.nowMs - 5 * 60_000, 'the age is the chain\'s: block time minus the swap time');
+  assert.equal(before.txHash, null, 'the link is looked for after the verdicts are shown');
+  await settle(() => state().before.txHash !== null);
+  assert.equal(state().before.txHash, SWAP_TX);
+  const reads = chain.calls.length;
+  await swap.refresh();
+  assert.equal(state().before.txHash, SWAP_TX, 'kept across reads');
+  assert.equal(chain.calls.slice(reads).filter((c) => c.method === 'EXPERIMENTAL_changes' || c.method === 'tx').length, 0, 'found once per swap, not at every poll');
+});
+
+test('the swap transaction is found whatever the block rate, over skipped heights, and when its receipt ran one block after the transaction', async () => {
+  for (const [blockMs, skipped, late] of [[600, [], 0], [1300, [], 0], [600, [999_820, 999_821], 0], [1000, [], -1]]) {
+    const chain = afterSwap(5, (c) => { c.blockMs = blockMs; c.lastFlipMs = c.nowMs - 300 * blockMs; c.skipped = new Set(skipped); c.swapTx.blocksLate = late; });
+    const { swap, state } = setup(chain);
+    await swap.refresh();
+    await settle(() => state().before.txHash !== null);
+    assert.equal(state().before.txHash, SWAP_TX, `block rate ${blockMs}, skipped ${skipped}, late ${late}`);
+  }
+});
+
+test('no swap transaction link when the chain gives none, when it is not a successful flip, or when the lookup fails; the contrast stays', async () => {
+  const cases = {
+    'no change in that block': (c) => { c.swapTx = null; },
+    'not a flip': (c) => { c.swapTx.result = { ...flipTxResult, transaction: { ...flipTxResult.transaction, actions: [{ FunctionCall: { method_name: 'other' } }] } }; },
+    'another receiver': (c) => { c.swapTx.result = { ...flipTxResult, transaction: { ...flipTxResult.transaction, receiver_id: 'evil.testnet' } }; },
+    'a failed transaction': (c) => { c.swapTx.result = { ...flipTxResult, status: { Failure: {} } }; },
+  };
+  for (const [name, mutate] of Object.entries(cases)) {
+    const chain = afterSwap(5, mutate);
+    const { swap, state } = setup(chain);
+    await swap.refresh();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(state().before.verdict.decision, 'BLOCK', name);
+    assert.equal(state().before.txHash, null, name);
+  }
+  const chain = afterSwap(5);
+  const { swap, state } = setup(chain);
+  chain.skipped = new Set(Array.from({ length: 400 }, (_, i) => 999_700 + i));
+  await swap.refresh();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.equal(state().mode, 'live');
+  assert.equal(state().before.txHash, null, 'a search that finds no block gives up quietly');
+});
+
+test('a failed lookup is tried again at later reads, at most three times for one swap', async () => {
+  const chain = afterSwap(5, (c) => { c.swapTx = null; });
+  const { swap, state } = setup(chain);
+  const lookups = () => chain.calls.filter((c) => c.method === 'EXPERIMENTAL_changes').length;
+  for (let read = 0; read < 5; read++) { await swap.refresh(); await new Promise((resolve) => setTimeout(resolve, 20)); }
+  assert.equal(lookups(), 3 * 2, 'two blocks looked at per try');
+  chain.swapTx = { hash: SWAP_TX, result: flipTxResult };
+  chain.lastFlipMs -= 1000; // a new swap: its own three tries
+  await swap.refresh();
+  await settle(() => state().before.txHash !== null);
+  assert.equal(state().before.txHash, SWAP_TX);
+});
+
+test('no contrast data when the vulnerable build is live, when nothing was ever swapped, when the switch disagrees about what is live, or when the other build cannot be read', async () => {
+  const cases = {
+    'vulnerable is live': (c) => { c.build = 'vulnerable'; },
+    'no swap yet': (c) => { c.flips = 0; },
+    'last swap time unknown': (c) => { c.lastFlipMs = 0; },
+    'the switch has not caught up': (c) => { c.statusLive = 'vulnerable'; },
+    'swap time in the future': (c) => { c.lastFlipMs = c.nowMs + 5000; },
+    'other build has a malformed verdict': (c) => { c.verdicts[HASH.vulnerable] = { code_hash: 'x', status: 'Unsafe', rule_ids: [] }; },
+  };
+  for (const [name, mutate] of Object.entries(cases)) {
+    const chain = afterSwap(5, mutate);
+    const { swap, state } = setup(chain);
+    await swap.refresh();
+    assert.equal(state().mode, 'live', name);
+    assert.equal(state().before, null, name);
+  }
+  const chain = afterSwap(5);
+  const { swap, state } = setup(chain);
+  chain.build = 'vulnerable';
+  await swap.refresh();
+  assert.equal(chain.calls.filter((c) => c.params?.method_name === 'get_verdict').length, 1, 'a live BLOCK needs no second registry read');
+  assert.equal(state().before, null);
+});
+
+test('the contrast goes away when the visitor swaps back to the vulnerable build', async () => {
+  const chain = afterSwap(5);
+  const { swap, state } = setup(chain);
+  await swap.refresh();
+  assert.ok(state().before);
+  await swap.flip();
+  assert.equal(state().build, 'vulnerable');
+  assert.equal(state().before, null);
 });
 
 test('the code bytes are hashed once per new hash, not at every poll', async () => {

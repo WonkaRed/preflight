@@ -109,7 +109,7 @@ test('the agent panel says plainly that it is scripted, sends nothing, and links
   assert.match(html, /spending policy is set by the agent's owner and has no default, so this script assumes one that allows this contract and 0\.5 NEAR per call/);
   assert.doesNotMatch(html, /does not show/);
   assert.match(html, /id="swap-title"><span>The address never changes\.<\/span> <span>The code does\.<\/span><\/h1>\s*<p class="swap-lede">AI agents pay smart contracts by their address\. The owner can swap the code behind that address at any time\. Preflight checks the code, not the address\./);
-  assert.match(html, /This scripted agent is shown holding a key that can spend\. Our testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same\./);
+  assert.match(html, /This scripted agent is shown holding a key that can spend\. My testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same\./);
   // The first screen is plain words; the technical wording stays reachable.
   assert.match(html, /<h2>A normal safety check<\/h2>\s*<p class="card-sub">Only looks at the address<\/p>/);
   assert.match(html, /<p class="card-sub">Looks at the code that is live right now<\/p>/);

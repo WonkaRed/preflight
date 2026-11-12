@@ -27,6 +27,9 @@ const DECISION = { Unsafe: 'BLOCK', Warn: 'WARN', Safe: 'ALLOW' };
 export const STATUS_OF = Object.fromEntries(Object.entries(DECISION).map(([status, decision]) => [decision, status]));
 const REPORT_URL = /^https:\/\/[^\s"<>]{1,300}$/;
 const BUILDS = ['vulnerable', 'patched'];
+// Finding the swap transaction costs a few block reads: bounded, and a courtesy (the link is left out when it cannot be found).
+const SEARCH_READS = 10;
+const LOCATE_TRIES = 3;
 
 export const isAccountId = (id) => typeof id === 'string' && id.length >= 2 && id.length <= 64 && ACCOUNT_ID.test(id);
 const isObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -176,11 +179,11 @@ const count = (value, what) => {
   return n;
 };
 
-/** What `switch.status()` returns, reduced to what the page uses: the two builds' code hashes, the swap count, and when the next swap is allowed (chain time, ms). */
+/** What `switch.status()` returns, reduced to what the page uses: the two builds' code hashes, the swap count, when the last swap ran and when the next is allowed (chain time, ms). */
 function parseStatus(raw) {
   const hashOf = (build) => (isObject(raw) && isObject(raw[build]) && isHash(raw[build].code_hash) ? raw[build].code_hash : null);
   if (hashOf('vulnerable') === null || hashOf('patched') === null) throw new RpcError('status() has no usable code hashes', 'shape');
-  return { hashes: { vulnerable: hashOf('vulnerable'), patched: hashOf('patched') }, flips: count(raw.flips, 'flips'), nextFlipMs: count(raw.next_flip_ms, 'next_flip_ms') };
+  return { live: raw.live, hashes: { vulnerable: hashOf('vulnerable'), patched: hashOf('patched') }, flips: count(raw.flips, 'flips'), lastFlipMs: count(raw.last_flip_ms, 'last_flip_ms'), nextFlipMs: count(raw.next_flip_ms, 'next_flip_ms') };
 }
 
 /** The registry's answer for one hash, as a decision. No verdict is a WARN, as in the guard: unaudited code, or code changed since its audit. */
@@ -225,6 +228,22 @@ async function verifiedHash(env, cfg, net, claimed, seen) {
   return actual;
 }
 
+/**
+ * The build that is not live, as the registry sees it, once at least one swap has happened and the switch agrees which build is live (so the
+ * other build did run at this address until the last swap). Null when it cannot be told or read: it is context for the live verdict, never a reason to fail the read.
+ */
+async function otherBuild(net, cfg, status, codeHash, blockMs, now) {
+  const live = BUILDS.find((name) => status.hashes[name] === codeHash);
+  const build = BUILDS.find((name) => name !== live);
+  if (live === undefined || status.live !== live || status.flips === 0 || status.lastFlipMs === 0 || status.lastFlipMs > blockMs) return null;
+  const hash = status.hashes[build];
+  try {
+    return { build, codeHash: hash, verdict: parseVerdict(await callView(net, cfg.registryId, 'get_verdict', { code_hash: hash }), hash), swappedAt: now - (blockMs - status.lastFlipMs), lastFlipMs: status.lastFlipMs, txHash: null };
+  } catch {
+    return null;
+  }
+}
+
 async function readOnce(env, cfg, net, seen) {
   const [account, statusRaw, block] = await Promise.all([
     query(net, { request_type: 'view_account', account_id: cfg.chameleonId }),
@@ -236,17 +255,73 @@ async function readOnce(env, cfg, net, seen) {
   const status = parseStatus(statusRaw);
   const nanos = block?.header?.timestamp_nanosec;
   if (typeof nanos !== 'string' || !/^\d{10,25}$/.test(nanos)) throw new RpcError('block header has no timestamp', 'shape');
+  const blockMs = Number(BigInt(nanos) / 1_000_000n);
 
   const codeHash = await verifiedHash(env, cfg, net, account.code_hash, seen);
   const verdict = parseVerdict(await callView(net, cfg.registryId, 'get_verdict', { code_hash: codeHash }), codeHash);
-  const remaining = status.nextFlipMs - Number(BigInt(nanos) / 1_000_000n);
+  const remaining = status.nextFlipMs - blockMs;
+  // A live BLOCK needs no context; any other verdict is shown beside what the registry said about the build that ran before.
+  const before = verdict.decision === 'BLOCK' ? null : await otherBuild(net, cfg, status, codeHash, blockMs, env.now());
   return {
     codeHash,
     build: BUILDS.find((name) => status.hashes[name] === codeHash) ?? null,
     verdict,
+    before,
     flips: status.flips,
     waitUntil: remaining > 0 ? env.now() + remaining + COUNTDOWN_MARGIN_MS : null,
+    latest: Number.isSafeInteger(block.header.height) ? { height: block.header.height, ms: blockMs } : null,
   };
+}
+
+/**
+ * The height of the block whose timestamp is `targetMs` (the contract stamps a swap with the block it ran in), found by
+ * reading blocks and correcting the guess by the block rate those reads show. Null when it is not found in a few reads.
+ */
+async function blockAt(net, targetMs, latest) {
+  let known = latest;
+  let per = 1000;
+  let height = Math.max(1, latest.height - Math.round((latest.ms - targetMs) / per));
+  for (let read = 0; read < SEARCH_READS; read++) {
+    let header;
+    try {
+      header = (await net.call('block', { block_id: height }, { retry: false }))?.header;
+    } catch (error) {
+      if (!/UNKNOWN_BLOCK/.test(error.message)) throw error;
+      height += 1; // a height the chain skipped
+      continue;
+    }
+    const nanos = header?.timestamp_nanosec;
+    if (typeof nanos !== 'string' || !/^\d{10,25}$/.test(nanos)) return null;
+    const ms = Number(BigInt(nanos) / 1_000_000n);
+    if (ms === targetMs) return height;
+    if (known.height !== height) per = Math.min(5000, Math.max(100, (known.ms - ms) / (known.height - height)));
+    known = { height, ms };
+    height = Math.max(1, height - (Math.round((ms - targetMs) / per) || Math.sign(ms - targetMs)));
+  }
+  return null;
+}
+
+/**
+ * The transaction that made the last swap, read from the chain: the block that ran it, then that block's change to the
+ * flip key's access key (every swap this page and the idle reset send spends it), then the transaction itself, which must
+ * be a successful `flip` on the switch. Null when any step does not hold.
+ */
+async function findSwapTx(net, cfg, lastFlipMs, latest) {
+  const height = latest && await blockAt(net, lastFlipMs, latest);
+  if (!height) return null;
+  const key = { account_id: cfg.flipSignerId, public_key: `ed25519:${base58Encode(cfg.secret.publicKey)}` };
+  // The swap's receipt runs in the block that took the transaction (the signer is the receiver), or the one after it.
+  for (const id of [height, height - 1]) {
+    const result = await net.call('EXPERIMENTAL_changes', { changes_type: 'single_access_key_changes', keys: [key], block_id: id }, { retry: false });
+    for (const change of Array.isArray(result?.changes) ? result.changes : []) {
+      const hash = change?.cause?.type === 'transaction_processing' ? change.cause.tx_hash : null;
+      if (!isHash(hash)) continue;
+      const tx = await net.call('tx', { tx_hash: hash, sender_account_id: cfg.flipSignerId, wait_until: 'NONE' }, { retry: false });
+      const flips = (tx?.transaction?.actions ?? []).some((action) => action?.FunctionCall?.method_name === 'flip');
+      if (tx?.transaction?.receiver_id === cfg.switchId && flips && isObject(tx.status) && 'SuccessValue' in tx.status) return hash;
+    }
+  }
+  return null;
 }
 
 // ---- Sending the swap --------------------------------------------------------------------------------------------
@@ -285,6 +360,7 @@ const defaults = () => ({
  *              replays the bundled recording, 'empty' means there is neither a live contract nor a recording.
  * state.reason why the mode is not live: 'unconfigured' | 'rpc-down' | 'cannot-pay' (the demo key can no longer pay for swaps).
  * state.tx     the swap this visitor sent: { stage: 'pending' | 'landing' | 'done' | 'unseen' | 'failed' | 'unconfirmed', hash, message }.
+ * state.before  while live code is not a BLOCK and a swap has happened: the build that ran at this address until the last swap, as `{ build, codeHash, verdict, swappedAt (local epoch ms), lastFlipMs, txHash }`, else null. `txHash` is the last swap's transaction, once found on chain.
  * state.waitUntil  local epoch ms before which the contract will refuse another swap, or null.
  * state.replay  the recording's current step (0 is before its first swap).
  * state.reconnecting  live data is still shown but the last read failed on every endpoint (a note, not yet a fallback).
@@ -298,7 +374,7 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
   let state = {
     mode: 'loading', reason: null, detail: '', recorded, replay: 0,
     address: config.chameleonId || recorded?.chameleonId || null,
-    codeHash: null, build: null, verdict: null, flips: null, waitUntil: null, tx: null, reconnecting: false, endpoint: null,
+    codeHash: null, build: null, verdict: null, before: null, flips: null, waitUntil: null, tx: null, reconnecting: false, endpoint: null,
   };
   let cancelTimer = () => {};
   let activeUntil = 0;
@@ -307,10 +383,12 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
   let reading = null;
   let spent = false;
   let failedReads = 0;
+  let located = { ms: null, hash: null, tries: 0 }; // the swap transaction found for the swap at `ms`
+  let locating = false;
 
   const set = (patch) => { state = { ...state, ...patch }; onChange(state); };
   const fallback = (reason, detail = '') => set({
-    mode: recorded ? 'recorded' : 'empty', reason, detail, tx: null, waitUntil: null, reconnecting: false, endpoint: null,
+    mode: recorded ? 'recorded' : 'empty', reason, detail, before: null, tx: null, waitUntil: null, reconnecting: false, endpoint: null,
     replay: state.mode === 'recorded' ? state.replay : 0,
   });
 
@@ -324,9 +402,11 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
     reading ??= (async () => {
       if (spent || !cfg.ok) return;
       try {
-        const chain = await readChain();
+        const { latest, ...chain } = await readChain();
         failedReads = 0;
+        if (chain.before) chain.before.txHash = located.ms === chain.before.lastFlipMs ? located.hash : null;
         set({ mode: 'live', reason: null, detail: '', reconnecting: false, endpoint: net.host(), ...chain });
+        if (chain.before && chain.before.txHash === null) locateSwap(chain.before.lastFlipMs, latest);
       } catch (error) {
         // A blip must not replace data that was live a moment ago: keep it, with a note, for a couple of reads. Reading goes on
         // either way, so a recording gives way to live data again as soon as one read works.
@@ -335,6 +415,17 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
       }
     })().finally(() => { reading = null; });
     return reading;
+  }
+
+  /** Looks for the swap transaction in the background, so the verdicts paint first; the link appears when it is found. */
+  async function locateSwap(ms, latest) {
+    if (locating || (located.ms === ms && located.tries >= LOCATE_TRIES)) return;
+    locating = true;
+    let hash = null;
+    try { hash = await findSwapTx(net, cfg, ms, latest); } catch { /* a courtesy: the strip shows without the link */ }
+    located = { ms, hash, tries: located.ms === ms ? located.tries + 1 : 1 };
+    locating = false;
+    if (!stopped && state.mode === 'live' && state.before?.lastFlipMs === ms) set({ before: { ...state.before, txHash: hash } });
   }
 
   // Nothing live is left to show: the recording takes over for good, and the page stops reading.

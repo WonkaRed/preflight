@@ -12,15 +12,15 @@ export const CALL = { method: 'deposit', deposit: '500000000000000000000000', la
 const OUTCOME = {
   BLOCK: { tone: 'block', word: 'REFUSED', line: 'The guard refused the call before signing. Nothing was signed or sent.' },
   WARN: { tone: 'warn', word: 'DECLINED', line: 'The guard asks a human before it signs a Warn. Nobody is here, so the call is declined. Nothing was signed or sent.' },
-  ALLOW: { tone: 'allow', word: 'ALLOWED', line: 'Guard allows; the call would be signed (not sent in this demo). This exact code holds a Safe verdict: the vault credits the deposit to the agent, less its 1% fee, and the agent can withdraw it.' },
+  ALLOW: { tone: 'allow', word: 'ALLOWED', line: 'ALLOWED is the right answer for this code: it is the fixed build. Guard allows; the call would be signed (not sent in this demo). This exact code holds a Safe verdict: the vault credits the deposit to the agent, less its 1% fee, and the agent can withdraw it.' },
 };
 /** What the verdict says is wrong with the code, in the vault's terms (the chameleon is a deposit vault). */
 const HARM = {
-  PF001: 'On this build anyone can credit themselves a balance without paying and withdraw what the agent deposits (PF001).',
+  PF001: (build) => `On ${build} anyone can credit themselves a balance without paying and withdraw what the agent deposits (PF001).`,
 };
 /** What a rule id means, in words. */
 export const RULE_WORDS = { PF001: 'anyone can credit themselves a balance' };
-const harm = (verdict) => HARM[verdict.ruleIds.find((rule) => HARM[rule])] ?? `The registry marks this exact code Unsafe${verdict.ruleIds.length ? ` (${verdict.ruleIds.join(', ')})` : ''}.`;
+const harm = (verdict, build = 'this build') => HARM[verdict.ruleIds.find((rule) => HARM[rule])]?.(build) ?? `The registry marks ${build === 'this build' ? 'this exact code' : build} Unsafe${verdict.ruleIds.length ? ` (${verdict.ruleIds.join(', ')})` : ''}.`;
 const NOTE = {
   live: 'Composed here from the live reads above, with the guard\'s decision-log fields.',
   recorded: 'Composed from the recorded verdict, not a live check, with the guard\'s decision-log fields.',
@@ -35,18 +35,27 @@ const plainCheck = (verdict) => (verdict.decision === 'BLOCK'
   : verdict.decision === 'ALLOW' ? 'The code at this address is the fixed one.'
     : verdict.registered ? 'The code at this address has a warning on record.' : 'Nobody has vouched for the code at this address.');
 
+/** The same call on the other build that ran at this address, as the registry judges that build. */
+function contrast({ codeHash, verdict }) {
+  const outcome = OUTCOME[verdict.decision];
+  const result = verdict.decision === 'BLOCK' ? 'the guard stops the call before signing' : `the result is ${outcome.word}`;
+  const why = verdict.decision === 'BLOCK' ? ` ${harm(verdict, 'that code')}` : '';
+  return { tone: outcome.tone, word: outcome.word, hash: codeHash, line: `The same call on the other code that ran at this address: the registry verdict for it is ${verdictText(verdict)}, so ${result}.${why}` };
+}
+
 /**
  * What the panel shows. `show` is false when there is no address to name (the section hides). `key` is null until a verdict
- * is known; the panel plays again when it changes. `at` (epoch ms) stamps the log line only for a live check.
+ * is known; the panel plays again when it changes. `at` (epoch ms) stamps the log line only for a live check. `before`
+ * (the Swap's `state.before`, or null) is the other build that ran at this address: the same call on it is shown as the contrast.
  */
-export function agentScript({ mode, address, verdict, codeHash, at, step = 0 }) {
+export function agentScript({ mode, address, verdict, codeHash, at, step = 0, before = null }) {
   if (!address) return { show: false, key: null };
   const call = `${address}.${CALL.method} with ${CALL.label}`;
   if (!['live', 'recorded'].includes(mode) || !verdict || !codeHash) return { show: true, key: null, address, call };
   const entry = guardEntry({ contract: address, method: CALL.method, deposit: CALL.deposit, codeHash, verdict, at: mode === 'live' ? at : null });
   return {
     show: true,
-    key: `${mode}|${address}|${codeHash}|${verdict.decision}|${step}`,
+    key: `${mode}|${address}|${codeHash}|${verdict.decision}|${step}|${before?.codeHash ?? ''}`,
     address,
     call,
     codeHash,
@@ -55,6 +64,7 @@ export function agentScript({ mode, address, verdict, codeHash, at, step = 0 }) 
     outcome: verdict.decision === 'BLOCK' ? { ...OUTCOME.BLOCK, line: `${OUTCOME.BLOCK.line} ${harm(verdict)}` } : OUTCOME[verdict.decision],
     log: JSON.stringify(entry, null, 2),
     note: NOTE[mode],
+    contrast: before && contrast(before),
   };
 }
 
@@ -68,7 +78,7 @@ const ROWS = ['task', 'page', 'call', 'check', 'out'];
 const AGENT_ROWS = 3;
 export const AGENT_IDS = {
   section: 'swap-agent', replay: 'agent-replay', inject: 'agent-inject', call: 'agent-call', hash: 'agent-hash', verdict: 'agent-verdict', plain: 'agent-plain',
-  out: 'agent-out', word: 'agent-word', line: 'agent-line', log: 'agent-log', note: 'agent-note',
+  out: 'agent-out', contrast: 'agent-contrast', contrastWord: 'agent-contrast-word', contrastLine: 'agent-contrast-line', contrastHash: 'agent-contrast-hash', word: 'agent-word', line: 'agent-line', log: 'agent-log', note: 'agent-note',
   ...Object.fromEntries(ROWS.map((row) => [`row-${row}`, `agent-row-${row}`])),
 };
 
@@ -117,6 +127,14 @@ export function mountAgent(doc, { calm = false, now = () => Date.now(), schedule
     els.line.textContent = script.outcome.line;
     els.log.textContent = script.log;
     els.note.textContent = script.note;
+    els.contrast.hidden = !script.contrast;
+    if (script.contrast) {
+      els.contrast.setAttribute('data-tone', script.contrast.tone);
+      els.contrastWord.textContent = script.contrast.word;
+      els.contrastLine.textContent = script.contrast.line;
+      els.contrastHash.textContent = script.contrast.hash;
+      els.contrastHash.setAttribute('title', script.contrast.hash);
+    }
     const first = Math.max(ROW_DELAYS[AGENT_ROWS] - (now() - startedAt), BEAT_MS);
     reveal(AGENT_ROWS, first, 'verdict');
     reveal(AGENT_ROWS + 1, first + ROW_DELAYS[AGENT_ROWS + 1] - ROW_DELAYS[AGENT_ROWS], 'verdict');

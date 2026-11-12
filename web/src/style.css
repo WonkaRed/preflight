@@ -222,6 +222,22 @@ a { color: var(--focus); }
 .fine { margin-top: 1rem; color: var(--muted); font-size: 0.88rem; }
 .swap-print { margin: 0.5rem 0 0; max-width: 56rem; line-height: 1.5; }
 
+/* The code that ran here before the last swap, shown inside the Preflight card while its live verdict is not a BLOCK. */
+.before { margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid color-mix(in srgb, currentColor 35%, transparent); }
+.before-title { margin: 0; font: 800 1.05rem/1.3 var(--sans); }
+.before-said { margin: 0.4rem 0 0; line-height: 1.45; }
+.before-said .rules { font-size: 1rem; }
+.before-meta { margin: 0.5rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.7rem; font-size: 0.9rem; }
+.before-meta a { color: inherit; text-underline-offset: 0.2em; }
+.vw { display: inline-block; padding: 0 0.5rem; border-radius: 6px; font: 800 0.95rem/1.5 var(--sans); letter-spacing: 0.01em; background: var(--wash); color: var(--ink); }
+.vw[data-tone=block] { background: var(--severe-bg); color: var(--severe-fg); box-shadow: 0 0 0 2px #fff; }
+.vw[data-tone=warn] { background: var(--warning-bg); color: var(--warning-fg); }
+.vw[data-tone=allow] { background: var(--allow-bg); color: var(--allow-fg); box-shadow: 0 0 0 2px #fff; }
+#swap-pf:has(.before:not([hidden])) .card-line { min-height: 0; }
+.agent-contrast { margin-top: 0.6rem; }
+.astep .agent-contrast h3 { margin: 0; color: var(--c-sub); font-size: 0.95rem; }
+.agent-contrast .word { font-size: clamp(1.8rem, 6vw, 2.8rem); margin-top: 0.3rem; }
+
 /* A phone: the button and both verdicts have to share the first screen, so the cards go compact. */
 @media (max-width: 44rem) {
   .swap { padding-top: 0.9rem; }
@@ -244,6 +260,13 @@ a { color: var(--focus); }
   .swap-cards .word { margin-top: 0.2rem; font-size: 2.5rem; }
   .swap-cards .card-line { min-height: 0; margin-top: 0.3rem; font-size: 0.95rem; line-height: 1.35; }
   .swap-cards .hashline { padding-top: 0.4rem; }
+  .before { margin-top: 0.4rem; padding-top: 0.4rem; }
+  .before-title { font-size: 0.95rem; }
+  .before-said { margin-top: 0.25rem; font-size: 0.95rem; line-height: 1.35; }
+  .before-meta { margin-top: 0.3rem; font-size: 0.82rem; }
+  #swap-pf:has(.before:not([hidden])) > .hashline { display: none; }
+  /* The button already says "swap it back": the hint, the swap count and the first card's sub-line give way, so the contrast is on a phone's first screen. */
+  .swap:has(.before:not([hidden])) :is(.swap-hint, .swap-flips), .swap:has(.before:not([hidden])) #swap-trust .card-sub { display: none; }
 }
 
 /* Story sections: revealed as they are scrolled to */

@@ -59,6 +59,11 @@
           <p class="card-sub">Looks at the code that is live right now</p>
           <p class="word"><span id="pf-word">...</span><span class="rules" id="pf-rules"></span></p>
           <p class="card-line" id="pf-line"></p>
+          <div class="before" id="swap-before" hidden>
+            <p class="before-title" id="before-title"></p>
+            <p class="before-said">Preflight said <b class="vw" id="before-word"></b> <span class="rules" id="before-rules"></span> for it. <span id="before-reason"></span></p>
+            <p class="before-meta"><span>Code fingerprint then</span> <button type="button" class="hash" id="before-hash" data-copy aria-label="Copy the full code fingerprint (hash) of the other code"></button> <span id="before-tx"></span></p>
+          </div>
           <p class="hashline"><span title="A hash of the deployed code: change one byte and it changes.">Code fingerprint</span><button type="button" class="hash" id="pf-hash" data-copy aria-label="Copy the full code fingerprint (hash)"></button></p>
           <details class="tech">
             <summary>Technical detail</summary>
@@ -72,7 +77,7 @@
     <p class="swap-next"><a href="#swap-agent">Now watch an agent get told to pay it</a></p>
     <details class="fine">
       <summary>About this demo</summary>
-      <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account we control, so this shows what each check keys on, not that a verdict is right. <span id="swap-source"></span></p>
+      <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account I control, so this shows what each check keys on, not that a verdict is right. A timer I run resets the demo to the vulnerable build after 10 idle minutes on the fixed one (no swap in that time). <span id="swap-source"></span></p>
       <p class="swap-print">The left card is a plain allowlist by account id. It is not a model of any particular wallet or agent.</p>
     </details>
   </section>
@@ -84,7 +89,7 @@
       <button type="button" class="btn quiet" id="agent-replay">Watch it again</button>
       <details class="fold">
         <summary>About this simulation</summary>
-        <p class="agent-note">This scripted agent is shown holding a key that can spend. Our testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same.</p>
+        <p class="agent-note">This scripted agent is shown holding a key that can spend. My testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same.</p>
         <p class="agent-note">It plays what happens when an agent obeys a poisoned page. The guard's registry check runs on the live reads above; the guard's spending policy is set by the agent's owner and has no default, so this script assumes one that allows this contract and 0.5 NEAR per call. A real language model was the agent in recorded testnet runs: it followed the injected page in 8 of 10, and the guard refused all 16 injected calls before signing. <a href="https://github.com/WonkaRed/preflight#a-locally-run-model-as-the-agent">Read the recorded runs.</a></p>
       </details>
     </div>
@@ -117,6 +122,12 @@
             <pre class="agent-log" id="agent-log" tabindex="0" aria-label="Decision log entry"></pre>
             <p class="card-sub" id="agent-note"></p>
           </details>
+        </div>
+        <div class="card agent-out agent-contrast" id="agent-contrast" data-tone="none" hidden>
+          <h3>The same call, before the last swap</h3>
+          <p class="word" id="agent-contrast-word"></p>
+          <p class="card-line" id="agent-contrast-line"></p>
+          <p class="hashline"><span>Code fingerprint then</span> <button type="button" class="hash" id="agent-contrast-hash" data-copy aria-label="Copy the full code fingerprint (hash) of the other code"></button></p>
         </div>
       </li>
     </ol>

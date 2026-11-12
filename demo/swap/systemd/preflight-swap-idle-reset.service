@@ -1,0 +1,14 @@
+[Unit]
+Description=Preflight Swap idle reset: puts the demo chameleon back on the vulnerable build after 10 idle minutes on the patched one
+
+[Service]
+Type=oneshot
+# Exit 0 = nothing to do, skipped, or reset; 1 = it could not read the chain or the flip failed. Its one line per run is in `journalctl --user -t swap-idle-reset`.
+# A fixed identifier, because journald can lose the unit of a line from a process that exits at once, and `-u` would then miss it.
+SyslogIdentifier=swap-idle-reset
+WorkingDirectory=%h/Desktop/Projects/Survival/preflight-worktrees/publish/demo/swap
+Environment=PATH=%h/.local/share/mise/installs/node/26/bin:%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PREFLIGHT_TESTNET_KEYS=%h/.claude/secrets/survival-testnet
+ExecStart=%h/.local/share/mise/installs/node/26/bin/npm run --silent idle-reset
+# A run is a handful of reads and at most one transaction; a hung RPC must not leave runs piling up behind it.
+TimeoutStartSec=3min

@@ -21,6 +21,13 @@ const HINT = {
   recorded: 'Press it to replay a recorded swap of the code behind this address.',
 };
 
+// How long ago, in the words a visitor would use. Whole units, rounded down; under a minute is "a moment".
+const since = (ms) => {
+  const minutes = Math.floor(Math.max(ms, 0) / 60_000);
+  const [n, unit] = minutes < 1 ? [0, ''] : minutes < 60 ? [minutes, 'minute'] : minutes < 1440 ? [Math.floor(minutes / 60), 'hour'] : [Math.floor(minutes / 1440), 'day'];
+  return n === 0 ? 'a moment ago' : `${n} ${unit}${n === 1 ? '' : 's'} ago`;
+};
+
 const when = (state) => state.recorded?.recordedAt ?? '';
 
 const STATUS = {
@@ -64,14 +71,27 @@ export function viewModel(state, { now, explorerUrl }) {
     pf.word = 'No data';
   }
 
+  const txLink = (hash, text) => (isHash(hash) ? { href: `${explorerUrl}/tx/${hash}`, text } : null);
+  // The code that ran here before the last swap, when Preflight judged it differently: the contrast, shown only from chain data.
+  const prior = mode === 'live' && verdict && state.before && state.before.verdict.decision !== verdict.decision ? state.before : null;
+  const priorRule = prior?.verdict.ruleIds[0];
+  const before = prior && {
+    title: `Until ${since(now - prior.swappedAt)}, this same address ran different code.`,
+    word: prior.verdict.decision,
+    rules: prior.verdict.ruleIds.join(', '),
+    tone: pf.tone === 'none' ? 'none' : prior.verdict.decision.toLowerCase(),
+    reason: prior.verdict.decision === 'BLOCK' && RULE_WORDS[priorRule] ? `That code had a hole: ${RULE_WORDS[priorRule]}.` : '',
+    hash: prior.codeHash,
+    tx: txLink(prior.txHash, 'The swap transaction'),
+  };
+
   const swapping = state.tx !== null && ['pending', 'landing'].includes(state.tx.stage);
   const waitMs = state.waitUntil === null ? 0 : state.waitUntil - now;
   const button = mode === 'recorded' ? { label: 'Replay a recorded swap', disabled: false }
     : swapping ? { label: 'Swapping...', disabled: true }
       : waitMs > 0 ? { label: `Swap again in ${Math.ceil(waitMs / 1000)} s`, disabled: true }
-        : { label: 'Swap the code', disabled: mode !== 'live' };
+        : { label: before ? 'Swap it back and watch' : 'Swap the code', disabled: mode !== 'live' };
 
-  const txLink = (hash, text) => (isHash(hash) ? { href: `${explorerUrl}/tx/${hash}`, text } : null);
   let tx = null;
   if (replay) tx = replay.txHash ? { text: 'Recorded transaction.', link: txLink(replay.txHash, 'View it on the explorer') } : { text: 'The recording starts here. Each click replays one swap.', link: null };
   else if (state.tx) {
@@ -94,10 +114,11 @@ export function viewModel(state, { now, explorerUrl }) {
     address: address ?? 'no address yet',
     addressHref: address && isAccountId(address) ? `${explorerUrl}/account/${address}` : null,
     trust: address
-      ? { word: 'ALLOW', note: 'This address is on its safe list, so it says yes. Every time.' }
+      ? { word: 'ALLOW', note: `This address is on its safe list, so it says yes. Every time${before ? ', even for the code before' : ''}.` }
       : { word: 'No data', note: '' },
     pf,
-    agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, step: replay ? state.replay : 0 }),
+    before,
+    agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, step: replay ? state.replay : 0, before: prior }),
     hint: HINT[mode] ?? '',
     button,
     tx,
@@ -126,6 +147,17 @@ export function paint(doc, els, model, { animate = false } = {}) {
   els.pfBuild.textContent = model.pf.build;
   els.pfHash.textContent = model.pf.hash;
   els.pfHash.setAttribute('title', model.pf.hash);
+  els.before.hidden = model.before === null;
+  if (model.before) {
+    els.beforeTitle.textContent = model.before.title;
+    els.beforeWord.textContent = model.before.word;
+    els.beforeWord.setAttribute('data-tone', model.before.tone);
+    els.beforeRules.textContent = model.before.rules;
+    els.beforeReason.textContent = model.before.reason;
+    els.beforeHash.textContent = model.before.hash;
+    els.beforeHash.setAttribute('title', model.before.hash);
+    els.beforeTx.replaceChildren(...(model.before.tx ? [h(doc, 'a', { href: model.before.tx.href, target: '_blank', rel: 'noopener noreferrer' }, model.before.tx.text)] : []));
+  }
   els.button.textContent = model.button.label;
   els.button.disabled = model.button.disabled;
   els.hint.textContent = model.hint;
@@ -139,9 +171,10 @@ export function paint(doc, els, model, { animate = false } = {}) {
   }
 }
 
-const IDS = {
+export const IDS = {
   status: 'swap-status', detail: 'swap-detail', source: 'swap-source', address: 'swap-address', trustWord: 'trust-word', trustNote: 'trust-note',
   pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfTech: 'pf-tech', pfBuild: 'pf-build', pfHash: 'pf-hash',
+  before: 'swap-before', beforeTitle: 'before-title', beforeWord: 'before-word', beforeRules: 'before-rules', beforeReason: 'before-reason', beforeHash: 'before-hash', beforeTx: 'before-tx',
   button: 'swap-button', hint: 'swap-hint', flips: 'swap-flips', tx: 'swap-tx',
 };
 
