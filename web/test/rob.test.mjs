@@ -42,6 +42,23 @@ test('sync gates the button on the Swap being live; a click while gated sends no
   assert.equal(state().canAct, false);
 });
 
+test('an RPC node a block behind does not make a robbery read as no change: the page waits for the balance to move', async () => {
+  for (const [laggingReads, label] of [[2, 'catches up'], [99, 'never catches up']]) {
+    const chain = fakeChain();
+    let reads = 0;
+    const laggingFetch = async (url, init) => {
+      const lag = JSON.parse(init.body).params?.method_name === 'balance_of' && (reads += 1) > 1 && reads <= 1 + laggingReads;
+      const real = chain.balances['robber.example.testnet'];
+      if (lag) chain.balances['robber.example.testnet'] = '0';
+      try { return await chain.fetch(url, init); } finally { if (lag) chain.balances['robber.example.testnet'] = real; }
+    };
+    const { rob, state } = setup(chain, { env: { fetch: laggingFetch } });
+    rob.sync(true);
+    await rob.rob();
+    assert.deepEqual([state().stage, state().before, state().after], ['done', '0', ROB_AMOUNT_YOCTO], label);
+  }
+});
+
 test('on the vulnerable build the forged call succeeds: a real balance, before and after, and a transaction hash', async () => {
   const chain = fakeChain();
   const { rob, state } = setup(chain);

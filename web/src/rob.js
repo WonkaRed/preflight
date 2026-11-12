@@ -78,6 +78,19 @@ export function createRob({ config, onChange = () => {}, env: overrides = {} }) 
     return amount.toString();
   }
 
+  /**
+   * The forged balance after a successful call. An RPC node a block behind still answers with the old balance, so read until it has moved;
+   * if every read lags, the transaction's own success settles it: the call credits exactly ROB_AMOUNT_YOCTO.
+   */
+  async function creditedBalance(before) {
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      if (attempt > 0) await env.sleep(700);
+      const after = await balanceOf(cfg.robberId).catch(() => null);
+      if (after !== null && BigInt(after) > BigInt(before)) return after;
+    }
+    return (BigInt(before) + BigInt(ROB_AMOUNT_YOCTO)).toString();
+  }
+
   return {
     getState: () => state,
     /** `canAct`: the Swap reports a live chain; `build`: the hash of the code live right now, or null when unknown. Rob It reads nothing on its own. */
@@ -143,7 +156,7 @@ export function createRob({ config, onChange = () => {}, env: overrides = {} }) 
           return;
         }
         if (!isObject(status) || !('SuccessValue' in status)) throw new RpcError('send_tx returned no final status', 'network');
-        finish({ stage: 'done', hash, after: await balanceOf(cfg.robberId), message: '' });
+        finish({ stage: 'done', hash, after: await creditedBalance(before), message: '' });
       } catch (error) {
         if (error instanceof RpcError && error.kind === 'rpc' && CANNOT_PAY.test(error.detail)) { finish({ stage: 'cannot-pay', hash: null, message: '' }); return; }
         const unconfirmed = sent && error instanceof RpcError && error.kind === 'network';
