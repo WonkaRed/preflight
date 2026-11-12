@@ -4,8 +4,8 @@ import { createHash } from 'node:crypto';
 import { base58Encode } from '../src/near.js';
 import { SWAP_CONFIG } from '../src/swap-config.js';
 
-// The page's own config with the four live fields blanked: what a checkout without a deployment ships.
-export const UNSET_CONFIG = { ...SWAP_CONFIG, chameleonId: '', switchId: '', registryId: '', flipKey: '' };
+// The page's own config with the live fields blanked: what a checkout without a deployment ships.
+export const UNSET_CONFIG = { ...SWAP_CONFIG, chameleonId: '', switchId: '', registryId: '', flipKey: '', robberId: '', robberKey: '' };
 import { readFileSync } from 'node:fs';
 
 export const vector = JSON.parse(readFileSync(new URL('data/swap-vector.json', import.meta.url), 'utf8'));
@@ -13,6 +13,7 @@ export const recordedJson = JSON.parse(readFileSync(new URL('data/swap-recorded.
 
 export const CONFIG = {
   ...SWAP_CONFIG, chameleonId: 'chameleon.example.testnet', switchId: 'switch.example.testnet', registryId: 'registry.example.testnet', flipKey: vector.secretKey, flipSignerId: '',
+  robberId: 'robber.example.testnet', robberKey: vector.secretKey, robGasTgas: 30,
 };
 
 const WASM = { vulnerable: new TextEncoder().encode('demo vulnerable build'), patched: new TextEncoder().encode('demo patched build') };
@@ -27,6 +28,33 @@ const utf8 = (value) => [...Buffer.from(JSON.stringify(value))];
 
 /** The `tx` answer for a successful `flip` the switch signed itself (the flip key lives on the switch). */
 export const flipTxResult = { transaction: { signer_id: 'switch.example.testnet', receiver_id: 'switch.example.testnet', actions: [{ FunctionCall: { method_name: 'flip', args: 'e30=', gas: 1, deposit: '0' } }] }, status: { SuccessValue: '' } };
+
+/** The chain's own panic when the patched build refuses a direct call to `on_deposit` (demo/swap/chameleon/patched/src/lib.rs). */
+export const ON_DEPOSIT_PRIVATE_FAILURE = { ActionError: { index: 0, kind: { FunctionCallError: { ExecutionError: 'Smart contract panicked: Method on_deposit is private' } } } };
+
+const readString = (bytes, at) => {
+  const len = bytes[at] | (bytes[at + 1] << 8) | (bytes[at + 2] << 16) | (bytes[at + 3] << 24);
+  return { value: Buffer.from(bytes.subarray(at + 4, at + 4 + len)).toString('utf8'), at: at + 4 + len };
+};
+
+/**
+ * Reads the one field this fake chain needs out of a signed transaction `near.js#encodeFunctionCall` produced: which
+ * method it calls, on which receiver, with which JSON args. A purpose-built mirror of that one encoder, not a general
+ * Borsh reader; it is wrong to use for anything else.
+ */
+export function decodeSignedTx(signedBase64) {
+  const bytes = Buffer.from(signedBase64, 'base64');
+  let at = 0;
+  ({ at } = readString(bytes, at)); // signerId
+  at += 1 + 32 + 8; // key type, public key, nonce
+  const receiver = readString(bytes, at);
+  at = receiver.at + 32; // blockHash
+  at += 4 + 1; // actions vec len (always 1 here), action tag (FunctionCall)
+  const method = readString(bytes, at);
+  const argsLen = bytes[method.at] | (bytes[method.at + 1] << 8) | (bytes[method.at + 2] << 16) | (bytes[method.at + 3] << 24);
+  const argsBytes = bytes.subarray(method.at + 4, method.at + 4 + argsLen);
+  return { receiverId: receiver.value, methodName: method.value, args: JSON.parse(Buffer.from(argsBytes).toString('utf8')) };
+}
 
 /** `chain.script.<name>` holds per-test misbehavior; `chain.calls` records every request as `{ method, params }`. */
 export function fakeChain() {
@@ -48,6 +76,7 @@ export function fakeChain() {
     down: false, accessKeyError: null, statusOverride: undefined, codeOverride: undefined,
     calls: [],
     taken: new Set(),
+    balances: {}, // account id -> yoctoNEAR string the chameleon's `balance_of` reports; `on_deposit` is the only writer
   };
   const rpcError = (cause, info) => ({ error: { name: 'HANDLER_ERROR', cause: { name: cause, info } } });
   const view = (value) => ({ result: { result: utf8(value), logs: [], block_height: 1, block_hash: vector.tx.blockHash } });
@@ -72,6 +101,18 @@ export function fakeChain() {
       if (method === 'send_tx') {
         const error = chain.sendErrors.shift();
         if (error) return { error };
+        const decoded = decodeSignedTx(params.signed_tx_base64);
+        if (decoded.methodName === 'on_deposit') {
+          const done = { result: chain.sendResult ?? { final_execution_status: 'EXECUTED_OPTIMISTIC', status: { SuccessValue: '' } } };
+          if (chain.taken.has(params.signed_tx_base64)) return done;
+          chain.taken.add(params.signed_tx_base64);
+          chain.nonce += 1; // the chain consumes the key's nonce once a transaction is accepted, whether the call itself then succeeds or not
+          if (chain.sendResult) return done; // a test overrides the whole outcome (e.g. a forced Failure)
+          if (chain.build === 'patched') return { result: { final_execution_status: 'EXECUTED_OPTIMISTIC', status: { Failure: ON_DEPOSIT_PRIVATE_FAILURE } } };
+          const { depositor, net } = decoded.args;
+          chain.balances[depositor] = String(BigInt(chain.balances[depositor] ?? '0') + BigInt(net));
+          return done;
+        }
         const done = { result: chain.sendResult ?? { final_execution_status: 'EXECUTED_OPTIMISTIC', status: { SuccessValue: '' } } };
         if (chain.taken.has(params.signed_tx_base64)) return done; // the chain takes one signed transaction once, however often it is sent
         chain.taken.add(params.signed_tx_base64);
@@ -100,6 +141,10 @@ export function fakeChain() {
       if (type === 'call_function' && account === 'switch.example.testnet' && params.method_name === 'status') {
         if (chain.statusOverride !== undefined) return view(chain.statusOverride);
         return view(status(chain.flips, chain.nextFlipMs, HASH, chain.statusLive ?? chain.build, chain.lastFlipMs));
+      }
+      if (type === 'call_function' && account === 'chameleon.example.testnet' && params.method_name === 'balance_of') {
+        const { account_id: who } = JSON.parse(Buffer.from(params.args_base64, 'base64').toString());
+        return view(chain.balances[who] ?? '0');
       }
       if (type === 'call_function' && account === 'registry.example.testnet' && params.method_name === 'get_verdict') {
         const { code_hash: hash } = JSON.parse(Buffer.from(params.args_base64, 'base64').toString());

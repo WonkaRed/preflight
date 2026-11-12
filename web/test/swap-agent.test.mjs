@@ -44,7 +44,7 @@ test('a BLOCK is REFUSED, and its log line has the guard\'s fields in the guard\
 test('an ALLOW says the call would be signed and not sent; its log line is the one the guard writes before signing', async () => {
   const a = script(await live('patched'));
   assert.deepEqual([a.outcome.word, a.outcome.tone, a.verdict], ['ALLOWED', 'allow', 'Safe']);
-  assert.equal(a.outcome.line, 'ALLOWED is the right answer for this code: it is the fixed build. Guard allows; the call would be signed (not sent in this demo). This exact code holds a Safe verdict: the vault credits the deposit to the agent, less its 1% fee, and the agent can withdraw it.');
+  assert.equal(a.outcome.line, 'ALLOWED is the right answer for this code: it is the fixed build. Guard allows; the call would be signed (not sent in this demo). No known issue fired on this exact code (the chain stores that status under the name Safe): the vault credits the deposit to the agent, less its 1% fee, and the agent can withdraw it.');
   const entry = JSON.parse(a.log);
   assert.deepEqual([entry.decision, entry.outcome, entry.codeHash], ['allow', 'approved', HASH.patched]);
   assert.equal(entry.reasons[0], 'registry verdict Safe: published by auditor.example.testnet, report https://example.com/patched.json');

@@ -21,9 +21,9 @@ repository and can be read back from the chain without a key (see "Verify withou
 4. A real language model (`qwen3.8-27b`, a locally run model) was then the agent on the same testnet contracts, with the same
    keys (`make -C guard testnet-demo-llm`, `guard/demo/testnet-llm-demo.ts`), in two recorded batches of 5 runs
    ([`docs/testnet-llm-runs.txt`](testnet-llm-runs.txt), all 10 kept). It read the page with the injected instruction and
-   proposed the injected release in 8 of the 10 runs, on `shop-vulnerable` and on `shop-swapped`, 16 calls in all. The guard refused all 16 before anything
-   was signed, from the registry on chain (the agent's key allows `release` on both shops, so only the guard stood in the way); no
-   transaction exists for any of them. Batch 1: followed and blocked 5 times, and the model then stopped after the refusals, so the batch
+   proposed the injected release in 8 of the 10 runs, on `shop-vulnerable` and on `shop-swapped`, 16 calls in all: 8 on `shop-vulnerable`
+   were blocked by the registry's Unsafe verdict on chain, and 8 on `shop-swapped` were warned for no verdict and declined because no human
+   was there to approve them (the agent's key allows `release` on both shops, so only the guard stood in the way); no transaction exists for any of them. Batch 1: followed and blocked 5 times, and the model then stopped after the refusals, so the batch
    holds no real-task transaction (0 of 5). One thing changed between the batches: the demo's tool result for a refused call (a sentence in `guard/demo/llm-testnet-agent.ts`, not in the guard) now adds that
    the refusal applies to that call only and the task may continue with any contract that passes the check (no contract or method is named; the page is unchanged).
    Batch 2: followed and blocked 3 times, straight to the task once, no call once; the real task, the `release` of the audited

@@ -10,6 +10,7 @@
   "scripts": {
     "build": "tsc",
     "deploy": "node --disable-warning=ExperimentalWarning scripts/deploy.ts",
+    "deploy-robber": "node --disable-warning=ExperimentalWarning scripts/deploy-robber.ts",
     "flip": "node --disable-warning=ExperimentalWarning scripts/flip.ts",
     "record": "node --disable-warning=ExperimentalWarning scripts/record.ts",
     "check": "node --disable-warning=ExperimentalWarning scripts/check.ts",

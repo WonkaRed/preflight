@@ -21,6 +21,8 @@ Needs Node.js 22.22.2 or newer and network access. It installs the dependencies 
 | `switch.preflight-guard.testnet` | Stores both builds and has `flip()`. |
 | `registry.preflight-guard.testnet` | The existing Preflight registry. It holds one verdict per code hash, published by `auditor.preflight-guard.testnet`. |
 
+The chameleon holds zero full-access keys, yet its code has already changed dozens of times through `switch`'s own `flip` (the live page shows the exact count). Zero keys never meant fixed code; that is exactly why Preflight checks the fingerprint instead of counting keys.
+
 | Build | Code hash (base58, as NEAR shows it) | SHA-256 (hex) | Scanner | Registry verdict |
 | --- | --- | --- | --- | --- |
 | V, vulnerable | `CNtPsVA72SSm7xpTg2QdTZoyjR9K6zMmg4KKVnASwpfj` | `a90bdd6b7620881bdf98504748ff26db9e03dcd20592a975eb91fe3c84044942` | PF001 | Unsafe, `["PF001"]` |

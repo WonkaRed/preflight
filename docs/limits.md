@@ -26,7 +26,7 @@ The README's Limits section is the short version. This page has the full text of
 
 ## The Swap on the web page
 
-- The Swap is a demonstration of what each check keys on, not a measure of either. The "A normal safety check" card is a plain allowlist by account id, the simplest form of that check, not a model of any particular wallet or agent. The registry's auditor is an account I control.
+- The Swap is a demonstration of what each check keys on, not a measure of either. The "An address allowlist" card is a real baseline, the check agent wallets and NEAR function-call keys scoped to one contract already give you, not a model of any particular wallet or agent. The registry's auditor is an account I control.
 - The key in the page is public on purpose: it is a function-call key that can only call `flip` on a demo contract, with a small gas allowance, and everything on it is NEAR testnet, read through two public RPC endpoints (FastNEAR and dRPC) that the page fails over between because either may throttle.
 - When the demo key can no longer pay (allowance spent, account balance short, key removed) or the RPC is unreachable the button replays `demo/swap/recorded.json` and the page says so.
 - The page signs with the browser's built-in Ed25519 (WebCrypto), which older browsers lack; there it says so and nothing is sent.

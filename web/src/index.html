@@ -32,7 +32,7 @@
 <main class="wrap" id="top">
   <section class="swap" aria-labelledby="swap-title">
     <h1 id="swap-title"><span>The address never changes.</span> <span>The code does.</span></h1>
-    <p class="swap-lede">AI agents pay smart contracts by their address. The owner can swap the code behind that address at any time. Preflight checks the code, not the address.</p>
+    <p class="swap-lede">AI agents pay smart contracts by their address. The owner can often swap the code behind that address. Preflight checks the code, not the address.</p>
 
     <div class="swap-act">
       <button type="button" class="btn swap-btn" id="swap-button" disabled>Swap the code</button>
@@ -49,8 +49,8 @@
       <p class="swap-address"><code id="swap-address">no address yet</code></p>
       <div class="swap-cards">
         <article class="card" id="swap-trust" data-tone="trust">
-          <h2>A normal safety check</h2>
-          <p class="card-sub">Only looks at the address</p>
+          <h2>An address allowlist</h2>
+          <p class="card-sub">What a scoped agent key already checks</p>
           <p class="word" id="trust-word">No data</p>
           <p class="card-line" id="trust-note"></p>
         </article>
@@ -82,11 +82,31 @@
       </div>
     </div>
 
+    <p class="swap-print">This contract holds zero full-access keys, yet its code has already changed the number of times shown above, through its own switch. Zero keys never meant fixed code; that is exactly why the fingerprint check above matters more than counting keys.</p>
+
+    <div class="rob" id="swap-rob">
+      <h2 class="rob-title">See the hole for yourself</h2>
+      <p class="rob-lede">This button signs a real transaction on NEAR testnet, from a throwaway account, with no wallet. It calls the exact step in this contract that forges a balance nobody paid for.</p>
+      <p class="rob-narrative" id="rob-narrative"></p>
+      <div class="swap-act">
+        <button type="button" class="btn rob-btn" id="rob-button" disabled>Rob it</button>
+        <div class="swap-act-note">
+          <p class="rob-hint" id="rob-hint"></p>
+          <p class="rob-status" id="rob-status" data-tone="none" role="status"></p>
+        </div>
+      </div>
+      <p class="rob-tx" id="rob-tx" role="status"></p>
+      <details class="fold">
+        <summary>What this actually does</summary>
+        <p class="agent-note">The key in this page can call only this one step on this one contract. It cannot attach a deposit, so it cannot withdraw. The forged number grows in the contract's books, and no NEAR leaves through this page.</p>
+      </details>
+    </div>
+
     <p class="swap-next"><a href="#swap-agent">Now watch an agent get told to pay it</a></p>
     <details class="fine">
       <summary>About this demo</summary>
       <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account I control, so this shows what each check keys on, not that a verdict is right. A timer I run resets the demo to the vulnerable build after 10 idle minutes on the fixed one (no swap in that time). <span id="swap-source"></span></p>
-      <p class="swap-print">The left card is a plain allowlist by account id. It is not a model of any particular wallet or agent.</p>
+      <p class="swap-print">The left card is a real baseline, not a strawman: an address allowlist is what agent wallets and NEAR function-call keys scoped to one contract already give you. It is not a model of any particular wallet or agent.</p>
     </details>
   </section>
 
@@ -98,7 +118,7 @@
       <details class="fold">
         <summary>About this simulation</summary>
         <p class="agent-note">This scripted agent is shown holding a key that can spend. My testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same.</p>
-        <p class="agent-note">It plays what happens when an agent obeys a poisoned page. The guard's registry check runs on the live reads above; the guard's spending policy is set by the agent's owner and has no default, so this script assumes one that allows this contract and 0.5 NEAR per call. A real language model was the agent in recorded testnet runs: it followed the injected page in 8 of 10, and the guard refused all 16 injected calls before signing. <a href="https://github.com/WonkaRed/preflight#a-locally-run-model-as-the-agent">Read the recorded runs.</a></p>
+        <p class="agent-note">It plays what happens when an agent obeys a poisoned page. The guard's registry check runs on the live reads above; the guard's spending policy is set by the agent's owner and has no default, so this script assumes one that allows this contract and 0.5 NEAR per call. A real language model was the agent in recorded testnet runs: it followed the injected page in 8 of 10. Before signing, the guard turned the 16 injected calls into 8 blocks (a registry Unsafe verdict) and 8 warns, each declined because no human was there to approve it; no transaction exists for any of the 16. <a href="https://github.com/WonkaRed/preflight#a-locally-run-model-as-the-agent">Read the recorded runs.</a></p>
       </details>
     </div>
     <ol class="agent-steps">
@@ -159,7 +179,7 @@
         <svg viewBox="0 0 56 56" aria-hidden="true"><rect x="7" y="9" width="42" height="38" rx="6"/><path d="M7 21h42M21 21v26"/><path d="M28 30h14M28 38h9"/></svg>
         <h3>Remembers the verdict</h3>
         <p class="tag">Registry on NEAR</p>
-        <p>Keeps a verdict for each version of the code. Change the code and it is a new version with no verdict yet.</p>
+        <p>Keeps a verdict for each version of the code. Change the code and it is a new version with no verdict yet. Today that covers only the demo contracts on this page; every other contract gets a warn until someone audits it.</p>
         <p class="step-tech">Stored under the SHA-256 of the deployed wasm, so a different hash is a different verdict.</p>
         <a href="https://github.com/WonkaRed/preflight/tree/main/registry">See the contract</a>
       </li>
@@ -182,7 +202,7 @@
     </div>
     <div class="survey" id="mainnet-table"><p class="hint">Loading the survey.</p></div>
     <details class="fold survey-fold">
-      <summary>What a key count cannot tell you</summary>
+      <summary>The limits of this table</summary>
       <p id="mainnet-limits"></p>
     </details>
     <p class="survey-links"><a href="https://github.com/WonkaRed/preflight/blob/main/docs/mainnet-survey.md">The survey in the repository</a>, with the command that reproduces it.</p>

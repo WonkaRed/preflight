@@ -25,6 +25,9 @@ export interface SwapDeployment {
   retired?: { vulnerable: string; patched: string }[];
   /** The public key of the flip key: its private half is published on the web page. */
   flipKey: { publicKey: string; allowanceNear: string } | null;
+  /** The throwaway account that signs the "Rob it" exploit, and the public key of its scoped `on_deposit` key. Absent until deploy-robber.ts has run. */
+  robber?: string;
+  robberKey?: { publicKey: string; allowanceNear: string } | null;
   transactions: { step: string; signer: string; receiver: string; hash: string; what: string }[];
 }
 

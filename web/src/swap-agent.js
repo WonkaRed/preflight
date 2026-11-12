@@ -12,7 +12,7 @@ export const CALL = { method: 'deposit', deposit: '500000000000000000000000', la
 const OUTCOME = {
   BLOCK: { tone: 'block', word: 'REFUSED', line: 'The guard refused the call before signing. Nothing was signed or sent.' },
   WARN: { tone: 'warn', word: 'DECLINED', line: 'The guard asks a human before it signs a Warn. Nobody is here, so the call is declined. Nothing was signed or sent.' },
-  ALLOW: { tone: 'allow', word: 'ALLOWED', line: 'ALLOWED is the right answer for this code: it is the fixed build. Guard allows; the call would be signed (not sent in this demo). This exact code holds a Safe verdict: the vault credits the deposit to the agent, less its 1% fee, and the agent can withdraw it.' },
+  ALLOW: { tone: 'allow', word: 'ALLOWED', line: 'ALLOWED is the right answer for this code: it is the fixed build. Guard allows; the call would be signed (not sent in this demo). No known issue fired on this exact code (the chain stores that status under the name Safe): the vault credits the deposit to the agent, less its 1% fee, and the agent can withdraw it.' },
 };
 /** What the verdict says is wrong with the code, in the vault's terms (the chameleon is a deposit vault). */
 const HARM = {

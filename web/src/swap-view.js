@@ -5,6 +5,7 @@
 import { changedSince } from './code-pin.js';
 import { isHash } from './near.js';
 import { clean, h } from './report.js';
+import { createRob } from './rob.js';
 import { createSwap, isAccountId, parseRecorded } from './swap.js';
 import { agentScript, mountAgent, RULE_WORDS } from './swap-agent.js';
 import { SWAP_CONFIG } from './swap-config.js';
@@ -69,7 +70,7 @@ export function viewModel(state, { now, explorerUrl }) {
         : verdict.registered ? 'This code has a warning on record.' : 'Nobody has vouched for this code, or it changed after it was checked.';
     pf.tech = verdict.decision === 'BLOCK'
       ? (BUG_LINE[rule] ?? `The registry marks this exact code unsafe (${pf.rules}).`)
-      : verdict.decision === 'ALLOW' ? 'The registry holds a Safe verdict for this exact code.'
+      : verdict.decision === 'ALLOW' ? 'No known issue fired on this exact code (registry status: Safe).'
         : verdict.registered ? `The registry marks this exact code Warn (${pf.rules}).` : 'The registry has no verdict for this code: unaudited, or changed since its audit.';
     pf.build = { vulnerable: 'Vulnerable build', patched: 'Patched build' }[shown.build] ?? 'A build this page does not know';
     pf.hash = shown.codeHash;
@@ -190,6 +191,59 @@ export function paint(doc, els, model, { animate = false } = {}) {
   }
 }
 
+// "Rob it": ties to the same verdict word the Preflight card shows for the build that is live right now.
+const ROB_NARRATIVE = { block: 'This is the code Preflight said BLOCK to.', allow: 'This is the code it allowed.' };
+const nearAmount = (yocto) => {
+  const n = BigInt(yocto ?? 0);
+  const whole = n / 10n ** 24n;
+  const frac = ((n % 10n ** 24n) * 1000n) / 10n ** 24n;
+  return `${whole}.${frac.toString().padStart(3, '0')}`;
+};
+
+/** What the "Rob it" panel shows for `rob.getState()`, given the Preflight card's current tone (`pf.tone`) and where links go. */
+export function robViewModel(robState, pfTone, explorerUrl) {
+  const { ok, canAct, stage, before, after, hash, message } = robState;
+  const txLink = isHash(hash) ? { href: `${explorerUrl}/tx/${hash}`, text: 'View the transaction' } : null;
+  const busy = stage === 'reading' || stage === 'pending';
+  const STATUS = {
+    reading: ['none', 'Reading the chain.'],
+    pending: ['none', 'Sending.'],
+    done: ['block', 'Robbed.'],
+    refused: ['allow', 'Refused on chain.'],
+    'cannot-pay': ['warn', 'Out of gas allowance.'],
+    failed: ['warn', 'Failed.'],
+    unconfirmed: ['warn', 'Not confirmed yet.'],
+  };
+  const [tone, text] = STATUS[stage] ?? ['none', ''];
+  const TX = {
+    pending: { text: hash ? 'Signed in your browser and sent. Waiting for the network.' : 'Signing in your browser.', link: txLink },
+    done: { text: `A real transaction forged a credit, with no deposit ever made. Balance ${nearAmount(before)} to ${nearAmount(after)} NEAR.`, link: txLink },
+    refused: { text: `The contract refused it on chain: ${message}`, link: txLink },
+    'cannot-pay': { text: 'The shared key\'s gas allowance is low right now. It refills automatically; try again in a bit.', link: null },
+    failed: { text: message || 'The transaction failed.', link: txLink },
+    unconfirmed: { text: `Sent, but not yet confirmed. Check the transaction below; this page keeps reading the chain. ${message}`.trim(), link: txLink },
+  };
+  return {
+    narrative: ok && canAct ? (ROB_NARRATIVE[pfTone] ?? '') : '',
+    button: { label: busy ? 'Working...' : 'Rob it', disabled: !ok || !canAct || busy },
+    hint: !ok ? '' : !canAct ? 'This needs the live chain above; it is disabled until that is ready.' : stage === 'idle' ? 'One click. One real transaction. No wallet.' : '',
+    status: { tone, text },
+    tx: TX[stage] ?? null,
+  };
+}
+
+/** Writes the "Rob it" panel. */
+export function paintRob(doc, els, model) {
+  els.robNarrative.textContent = model.narrative;
+  els.robButton.textContent = model.button.label;
+  els.robButton.disabled = model.button.disabled;
+  els.robHint.textContent = model.hint;
+  els.robStatus.textContent = model.status.text;
+  els.robStatus.setAttribute('data-tone', model.status.tone);
+  els.robTx.replaceChildren(...(!model.tx ? [] : !model.tx.link ? [model.tx.text]
+    : [model.tx.text, ' ', h(doc, 'a', { href: model.tx.link.href, target: '_blank', rel: 'noopener noreferrer' }, model.tx.link.text)]));
+}
+
 export const IDS = {
   status: 'swap-status', detail: 'swap-detail', source: 'swap-source', address: 'swap-address', trustWord: 'trust-word', trustNote: 'trust-note',
   pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfTech: 'pf-tech', pfBuild: 'pf-build', pfHash: 'pf-hash',
@@ -198,9 +252,12 @@ export const IDS = {
   button: 'swap-button', hint: 'swap-hint', flips: 'swap-flips', tx: 'swap-tx',
 };
 
+export const ROB_IDS = { robNarrative: 'rob-narrative', robButton: 'rob-button', robHint: 'rob-hint', robStatus: 'rob-status', robTx: 'rob-tx' };
+
 /** Starts the section on the page and returns its controller. Never throws: whatever goes wrong, the section shows a state that says so. */
 export async function mountSwap(doc = document, config = SWAP_CONFIG) {
   const els = Object.fromEntries(Object.entries(IDS).map(([name, id]) => [name, doc.getElementById(id)]));
+  const robEls = Object.fromEntries(Object.entries(ROB_IDS).map(([name, id]) => [name, doc.getElementById(id)]));
   const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let recorded = null;
   try {
@@ -210,21 +267,30 @@ export async function mountSwap(doc = document, config = SWAP_CONFIG) {
 
   const agent = mountAgent(doc, { calm });
   let swap;
+  let rob;
   let watching = false;
   let shown = '';
+  let pfTone = 'none';
+  // "Rob it" paints on its own clicks too (signing and sending take a moment); it never polls the chain by itself.
+  const renderRob = () => paintRob(doc, robEls, robViewModel(rob.getState(), pfTone, config.explorerUrl));
   const render = () => {
     const state = swap.getState();
     const model = viewModel(state, { now: Date.now(), explorerUrl: config.explorerUrl });
     paint(doc, els, model, { animate: !calm });
     agent.update(model.agent);
+    pfTone = model.pf.tone;
+    rob.sync(state.mode === 'live', state.mode === 'live' ? state.codeHash : null);
+    renderRob();
     // The visitor asked for a swap: when the verdict it caused is off screen (a phone), bring it up, once, and never on load.
     const verdict = `${model.pf.word}|${model.pf.hash}`;
     if (watching && verdict !== shown) { watching = false; els.pfCard.scrollIntoView?.({ block: 'nearest', behavior: calm ? 'auto' : 'smooth' }); }
     shown = verdict;
   };
   swap = createSwap({ config, recorded, onChange: render });
+  rob = createRob({ config, onChange: renderRob });
   render();
   els.button.addEventListener('click', () => { watching = true; Promise.resolve(swap.flip()).finally(() => { watching = false; }); });
+  robEls.robButton.addEventListener('click', () => { rob.rob(); });
   // The countdown on the button needs a repaint each second; nothing else changes between polls.
   setInterval(() => { if (swap.getState().waitUntil !== null) render(); }, 500);
   doc.addEventListener('visibilitychange', () => { if (!doc.hidden) swap.wake(); });

@@ -15,10 +15,10 @@ const RPC_TIMEOUT_MS = 8000;
 const ROUND_PAUSE_MS = 400;
 // Failed reads that leave the last live data on screen (with a note) before the page falls back to the recording.
 const RECONNECT_POLLS = 2;
-const TX_LOOKUPS = 3;
+export const TX_LOOKUPS = 3;
 const LANDING_POLLS = 10;
-const LANDING_MS = 1500;
-const NONCE_TRIES = 3;
+export const LANDING_MS = 1500;
+export const NONCE_TRIES = 3;
 // The contract's interval is measured on chain time and the page reads chain time a block or two late: wait a second more.
 const COUNTDOWN_MARGIN_MS = 1000;
 const NO_CODE_HASH = '11111111111111111111111111111111';
@@ -123,7 +123,7 @@ async function post(env, url, method, params) {
  * request to another endpoint is safe for a signed transaction (one hash, the chain takes it once), so `send_tx` passes
  * the same bytes to each and never goes round twice.
  */
-function createRpc(env, urls) {
+export function createRpc(env, urls) {
   let first = 0;
   async function round(method, params) {
     let failure;
@@ -155,7 +155,7 @@ function createRpc(env, urls) {
   };
 }
 
-async function query(net, params) {
+export async function query(net, params) {
   const result = await net.call('query', { finality: 'optimistic', ...params });
   if (!isObject(result)) throw new RpcError(`RPC ${params.request_type} answered with no result object`, 'shape');
   // A failed view is HTTP 200 with `result.error` as text, which must never read as "no answer, no verdict".
@@ -163,7 +163,7 @@ async function query(net, params) {
   return result;
 }
 
-async function callView(net, accountId, method, args = {}) {
+export async function callView(net, accountId, method, args = {}) {
   const result = await query(net, { request_type: 'call_function', account_id: accountId, method_name: method, args_base64: btoa(JSON.stringify(args)) });
   const bytes = result.result;
   if (!Array.isArray(bytes) || !bytes.every((b) => Number.isInteger(b) && b >= 0 && b <= 255)) throw new RpcError(`${accountId}.${method} returned no byte array`, 'shape');
@@ -331,13 +331,30 @@ async function findSwapTx(net, cfg, lastFlipMs, latest) {
 
 // Every way the demo key can stop being able to pay (nearcore's InvalidTxError, InvalidAccessKeyError and ActionError names,
 // and the RPC's UNKNOWN_ACCESS_KEY for a deleted key): the allowance is spent, the account cannot cover gas or its storage, or the key is gone.
-const CANNOT_PAY = /NotEnoughAllowance|NotEnoughBalance|LackBalanceForState|SignerDoesNotExist|AccessKeyNotFound|UNKNOWN_ACCESS_KEY/;
+export const CANNOT_PAY = /NotEnoughAllowance|NotEnoughBalance|LackBalanceForState|SignerDoesNotExist|AccessKeyNotFound|UNKNOWN_ACCESS_KEY/;
 // What the switch logs, in the callback's receipt, when the chameleon's upgrade failed: the flip itself succeeded, the code did not change.
 const UPGRADE_FAILED = 'the chameleon\'s upgrade failed';
-const NONCE = /InvalidNonce/;
+export const NONCE = /InvalidNonce/;
 
 const upgradeFailed = (result) => (result?.receipts_outcome ?? []).some((receipt) => (receipt?.outcome?.logs ?? [])
   .some((line) => typeof line === 'string' && line.includes(UPGRADE_FAILED)));
+
+/**
+ * The final outcome of a transaction `signerId` sent, as the chain has it, or null: still unknown, or nobody could
+ * say. Used after send_tx gave no usable answer (a network blip, or a stale-nonce bounce that may have landed as an
+ * earlier copy), so a lost answer is never mistaken for a lost transaction. Shared by every sender of a transaction
+ * on this page (the Swap's flip, the Rob It exploit): same retry, same backoff.
+ */
+export async function txOutcome(net, env, signerId, hash, tries) {
+  for (let attempt = 0; attempt < tries; attempt++) {
+    if (attempt > 0) await env.sleep(LANDING_MS);
+    try {
+      const result = await net.call('tx', { tx_hash: hash, sender_account_id: signerId, wait_until: 'NONE' });
+      if (isObject(result?.status) && ('SuccessValue' in result.status || 'Failure' in result.status)) return result;
+    } catch { /* not found yet, or no endpoint answered: the next try, or unconfirmed */ }
+  }
+  return null;
+}
 
 /** The contract's own panic text from a failed outcome, else a plain sentence. Chain text, so it only ever reaches the page as text. */
 function failureMessage(failure) {
@@ -457,16 +474,7 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
   }
 
   /** The final outcome of our own transaction as the chain has it, or null: still unknown, or nobody could say. */
-  async function outcomeOf(hash, tries) {
-    for (let attempt = 0; attempt < tries; attempt++) {
-      if (attempt > 0) await env.sleep(LANDING_MS);
-      try {
-        const result = await net.call('tx', { tx_hash: hash, sender_account_id: cfg.flipSignerId, wait_until: 'NONE' });
-        if (isObject(result?.status) && ('SuccessValue' in result.status || 'Failure' in result.status)) return result;
-      } catch { /* not found yet, or no endpoint answered: the next try, or unconfirmed */ }
-    }
-    return null;
-  }
+  const outcomeOf = (hash, tries) => txOutcome(net, env, cfg.flipSignerId, hash, tries);
 
   async function sendFlip() {
     await reading;

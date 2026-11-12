@@ -111,6 +111,27 @@
       "receiver": "switch.preflight-guard.testnet",
       "hash": "3j4qVztFYaMMBBtP83EiWsGantxfBCnBDNCmbWFntDVN",
       "what": "flip with the flip key: the chameleon goes from the old build to the new vulnerable one"
+    },
+    {
+      "step": "create-robber",
+      "signer": "preflight-guard.testnet",
+      "receiver": "robber.preflight-guard.testnet",
+      "hash": "4AYspsDvLc5Y4gXN9a6WjkHguCriQ8Hdz2962Z5cCVuY",
+      "what": "create robber.preflight-guard.testnet with 0.3 NEAR (full-access key ed25519:8bEVzKALTZLbKBPxUeHh9VmspdLA6mdLn8BQnX56bdJ6)"
+    },
+    {
+      "step": "scope-robber-key",
+      "signer": "robber.preflight-guard.testnet",
+      "receiver": "robber.preflight-guard.testnet",
+      "hash": "631HcZ26oDyTKUhbd4sfZvVzc3vWmy8crqZwoeNaNozR",
+      "what": "add a function-call key (ed25519:6bmhERnLZU1R7ZHhVbJEvP8qGV9ZKn1TfpkAiXKLGCRY) to robber.preflight-guard.testnet: may call on_deposit on chameleon.preflight-guard.testnet only, gas allowance 0.1 NEAR, no deposit"
+    },
+    {
+      "step": "seed-robber-deposit",
+      "signer": "robber.preflight-guard.testnet",
+      "receiver": "chameleon.preflight-guard.testnet",
+      "hash": "FZ2TKYjZK6kfPZkfmsKn1tcdSQWUKyuoZyHr9K54aDcQ",
+      "what": "robber.preflight-guard.testnet deposits 0.05 NEAR into chameleon.preflight-guard.testnet for real, creating the balance entry \"Rob it\" forges a credit onto"
     }
   ],
   "retired": [
@@ -118,5 +139,10 @@
       "vulnerable": "HE6QGy21HDJNcGFU6N9vBiRutL52jv1R5DrgSkcA4WRa",
       "patched": "BzFFte9Lqs9kRfZcgRmYQNckLU9oBqK6SHBNfcQMwdsj"
     }
-  ]
+  ],
+  "robber": "robber.preflight-guard.testnet",
+  "robberKey": {
+    "publicKey": "ed25519:6bmhERnLZU1R7ZHhVbJEvP8qGV9ZKn1TfpkAiXKLGCRY",
+    "allowanceNear": "0.1"
+  }
 }

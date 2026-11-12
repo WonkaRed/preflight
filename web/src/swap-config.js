@@ -26,4 +26,15 @@ export const SWAP_CONFIG = {
   flipSignerId: '',
   // Gas attached to each `flip`, in Tgas (10^12 gas). The switch needs at least 100; the key's allowance pays for the attached gas.
   flipGasTgas: 150,
+
+  // The account "Rob it" signs as: a throwaway testnet account that holds nothing of value. Its full-access key never
+  // leaves the owner's machine; only the scoped key below is embedded here.
+  robberId: 'robber.preflight-guard.testnet',
+  // The key the browser signs `on_deposit` with. PUBLIC ON PURPOSE, same rule as flipKey above: a function-call access
+  // key limited to `on_deposit` on `chameleonId`, with a small gas allowance, on the throwaway account above. It can
+  // attach no deposit (no function-call key ever can), so it can never call `withdraw` either. The worst a copier can
+  // do is spend the demo's gas allowance forging the same bookkeeping credit the button already forges.
+  robberKey: 'ed25519:2T25iixFv9Qoqff5qtyMQ3BzSfH23erHLugBSPk1gbZfxWAStBwmQYuQ84sgY9JtFKGMByLsYyKkvaVe1YGWBhtv',
+  // Gas attached to each `on_deposit` call, in Tgas. `on_deposit` does far less work than `flip`; this is generous margin.
+  robGasTgas: 30,
 };

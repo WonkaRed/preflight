@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSwap, parseRecorded } from '../src/swap.js';
-import { IDS as PAGE_IDS, mountSwap, paint, viewModel } from '../src/swap-view.js';
+import { IDS as PAGE_IDS, mountSwap, paint, robViewModel, viewModel } from '../src/swap-view.js';
 import { fakeDocument, walk } from './fake-dom.mjs';
 import { CONFIG, fakeChain, flipTxResult, HASH, recordedJson, UNSET_CONFIG } from './swap-chain.mjs';
 
@@ -44,7 +44,7 @@ test('P live: the allowlist still says ALLOW and Preflight now says ALLOW too, o
   assert.equal(m.trust.word, 'ALLOW');
   assert.deepEqual([m.pf.tone, m.pf.word, m.pf.rules, m.pf.build, m.pf.hash], ['allow', 'ALLOW', '', 'Patched build', HASH.patched]);
   assert.equal(m.pf.line, 'This is the fixed code. Preflight says yes.');
-  assert.match(m.pf.tech, /Safe verdict for this exact code/);
+  assert.match(m.pf.tech, /No known issue fired on this exact code \(registry status: Safe\)/);
 });
 
 test('code with no verdict is WARN and says it is unaudited; an unknown rule falls back to a generic line', async () => {
@@ -345,4 +345,16 @@ test('the page says it plainly: no auditor needed, the code changed since you ar
   assert.match(html, /<b>No auditor needed for this one:<\/b> the code changed since you arrived\.<span class="pin-inline"> Fingerprint then <button[^>]*id="pin-then"[^>]*><\/button>, now <button[^>]*id="pin-now"[^>]*><\/button>\.<\/span>/);
   assert.match(html, /<details class="fold pin-fold">\s*<summary>Why no key list can tell you this<\/summary>/);
   assert.match(html, /<div class="swap-pin" id="swap-pin" hidden>/, 'hidden until there is a change to show');
+});
+
+test('the Rob it panel under each build: the narrative follows the live verdict, and an idle panel shows no leftover result', () => {
+  const idle = { ok: true, canAct: true, stage: 'idle', before: null, after: null, hash: null, message: '' };
+  const url = 'https://explorer.example';
+  const vulnerable = robViewModel(idle, 'block', url);
+  assert.deepEqual([vulnerable.narrative, vulnerable.button, vulnerable.status, vulnerable.tx], ['This is the code Preflight said BLOCK to.', { label: 'Rob it', disabled: false }, { tone: 'none', text: '' }, null]);
+  assert.equal(vulnerable.hint, 'One click. One real transaction. No wallet.');
+  assert.equal(robViewModel(idle, 'allow', url).narrative, 'This is the code it allowed.');
+  const refused = robViewModel({ ...idle, stage: 'refused', message: 'Method on_deposit is private', hash: '11111111111111111111111111111111' }, 'allow', url);
+  assert.deepEqual([refused.status.text, refused.tx.text], ['Refused on chain.', 'The contract refused it on chain: Method on_deposit is private']);
+  assert.equal(robViewModel({ ...idle, canAct: false }, 'block', url).button.disabled, true);
 });
