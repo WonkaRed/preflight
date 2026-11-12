@@ -223,7 +223,7 @@ a { color: var(--focus); }
 .swap-print { margin: 0.5rem 0 0; max-width: 56rem; line-height: 1.5; }
 
 /* "Rob it": a real testnet transaction, run from this page, against whichever build is live right now. */
-.rob { margin-top: 1.5rem; padding: clamp(1rem, 3vw, 1.5rem); max-width: 56rem; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.rob { margin-top: 1.5rem; padding: clamp(1rem, 3vw, 1.5rem); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
 .rob-title { margin: 0; font: 800 1.3rem/1.2 var(--sans); letter-spacing: -0.02em; }
 .rob-lede { margin: 0.5rem 0 0; line-height: 1.5; }
 .rob-narrative { margin: 0.6rem 0 0; font-weight: 650; }
@@ -240,6 +240,18 @@ a { color: var(--focus); }
 .rob-tx { margin: 0.6rem 0 0; color: var(--muted); overflow-wrap: anywhere; }
 .rob-tx:empty { display: none; }
 .rob-tx a { color: var(--focus); }
+/* The result of a rob is the page's payoff: a verdict card (same tones, same big word) across the panel, never a second button. */
+.rob-card { margin-block: 1.25rem; padding-block: clamp(1.25rem, 3vw, 2rem); }
+.rob-card .word { margin-top: 0; font-size: clamp(3.2rem, 11vw, 7.5rem); }
+.rob-figure { margin: 0.5rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.6rem; font: 800 clamp(1.7rem, 7.2vw, 3.8rem)/1.15 var(--sans); letter-spacing: -0.03em; font-variant-numeric: tabular-nums; }
+.rob-figure:empty { display: none; }
+.rob-num, .rob-arrow { white-space: nowrap; }
+.rob-unit { font-size: 0.5em; letter-spacing: 0.04em; color: var(--c-sub); }
+.rob-plain { margin: 0.75rem 0 0; max-width: 48rem; font: 650 clamp(1.05rem, 2.4vw, 1.3rem)/1.4 var(--sans); text-wrap: balance; }
+.rob-own { margin: 0.5rem 0 0; max-width: 48rem; color: var(--c-sub); font-size: 0.95rem; line-height: 1.45; overflow-wrap: anywhere; }
+.rob-own:empty { display: none; }
+.rob-link { margin: 0.9rem 0 0; font-weight: 650; }
+.rob-link a { color: inherit; text-underline-offset: 0.25em; }
 
 /* The auditor-free line under the two cards: shown only once the code at the address is not the code the visitor arrived to. */
 .swap-pin { margin-top: 0.8rem; padding: 0.5rem 1rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 1.25rem; background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--ink); border-radius: 12px; }
@@ -255,7 +267,8 @@ a { color: var(--focus); }
 .before { margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid color-mix(in srgb, currentColor 35%, transparent); }
 .before-title { margin: 0; font: 800 1.05rem/1.3 var(--sans); }
 .before-said { margin: 0.4rem 0 0; line-height: 1.45; }
-.before-said .rules { font-size: 1rem; }
+.before-said .vw { margin-inline: 0.2rem; }
+.before-said .rules { margin-left: 0.15rem; font-size: 1rem; }
 .before-meta { margin: 0.5rem 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 0.2rem 0.7rem; font-size: 0.9rem; }
 .before-meta a { color: inherit; text-underline-offset: 0.2em; }
 .vw { display: inline-block; padding: 0 0.5rem; border-radius: 6px; font: 800 0.95rem/1.5 var(--sans); letter-spacing: 0.01em; background: var(--wash); color: var(--ink); }
@@ -283,6 +296,8 @@ a { color: var(--focus); }
   .rob-lede { font-size: 0.92rem; line-height: 1.4; }
   .rob-btn { flex: 1 1 100%; min-height: 2.9rem; padding-block: 0.55rem; }
   .rob-status { font-size: 0.82rem; line-height: 1.3; }
+  .rob-card { margin-block: 0.9rem; padding: 0.9rem 1rem; }
+  .rob-card .word { font-size: 3.4rem; }
   .swap-stage { margin-top: 0.8rem; }
   .swap-address { margin-bottom: 0.5rem; }
   .swap-address code { font-size: 0.82rem; padding: 0.3rem 0.8rem; }

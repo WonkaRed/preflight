@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSwap, parseRecorded } from '../src/swap.js';
-import { IDS as PAGE_IDS, mountSwap, paint, robViewModel, viewModel } from '../src/swap-view.js';
+import { IDS as PAGE_IDS, mountSwap, paint, paintRob, ROB_IDS, robViewModel, viewModel } from '../src/swap-view.js';
 import { fakeDocument, walk } from './fake-dom.mjs';
 import { CONFIG, fakeChain, flipTxResult, HASH, recordedJson, UNSET_CONFIG } from './swap-chain.mjs';
 
@@ -59,10 +59,12 @@ test('code with no verdict is WARN and says it is unaudited; an unknown rule fal
 
 test('countdown: the button is disabled and counts down in whole seconds, never an error', async () => {
   const { state, chain } = await liveState('vulnerable', (c) => { c.nextFlipMs = c.nowMs + 6000; });
-  assert.deepEqual(view(state, chain.nowMs).button, { label: 'Swap again in 7 s', disabled: true });
-  assert.deepEqual(view(state, chain.nowMs + 6001).button, { label: 'Swap again in 1 s', disabled: true });
+  assert.deepEqual(view(state, chain.nowMs).button, { label: 'Ready in 7 s', disabled: true });
+  assert.deepEqual(view(state, chain.nowMs + 6001).button, { label: 'Ready in 1 s', disabled: true });
   assert.deepEqual(view(state, chain.nowMs + 7000).button, { label: 'Swap the code', disabled: false });
   assert.equal(view(state, chain.nowMs).tx, null);
+  assert.equal(view(state, chain.nowMs).hint, 'The code was just swapped. The demo rests a moment between swaps.', 'true for a visitor who never swapped');
+  assert.equal(view(state, chain.nowMs + 7000).hint, 'Press it. The code behind this address changes, live.', 'the line is gone with the countdown');
 });
 
 test('pending: the button is disabled while signing, sending and waiting for the deploy; the tx link appears once the hash is known', async () => {
@@ -256,7 +258,7 @@ test('fixed code live: the first screen still shows the contrast, from the regis
   assert.equal(m.before.reason, 'That code had a hole: anyone can credit themselves a balance.');
   assert.equal(m.before.hash, HASH.vulnerable);
   assert.deepEqual(m.before.tx, { href: `${EXPLORER}/tx/${hash}`, text: 'The swap transaction' });
-  assert.equal(view({ ...state, tx: null, waitUntil: chain.nowMs + 4000 }, chain.nowMs).button.label, 'Swap again in 4 s', 'the countdown still wins');
+  assert.equal(view({ ...state, tx: null, waitUntil: chain.nowMs + 4000 }, chain.nowMs).button.label, 'Ready in 4 s', 'the countdown still wins');
 });
 
 test('the age is in whole units rounded down, never rounded up into a claim that is not true', async () => {
@@ -351,10 +353,72 @@ test('the Rob it panel under each build: the narrative follows the live verdict,
   const idle = { ok: true, canAct: true, stage: 'idle', before: null, after: null, hash: null, message: '' };
   const url = 'https://explorer.example';
   const vulnerable = robViewModel(idle, 'block', url);
-  assert.deepEqual([vulnerable.narrative, vulnerable.button, vulnerable.status, vulnerable.tx], ['This is the code Preflight said BLOCK to.', { label: 'Rob it', disabled: false }, { tone: 'none', text: '' }, null]);
+  assert.deepEqual([vulnerable.narrative, vulnerable.button, vulnerable.status, vulnerable.tx, vulnerable.result], ['This is the code Preflight said BLOCK to.', { label: 'Rob it', disabled: false }, { tone: 'none', text: '' }, null, null]);
   assert.equal(vulnerable.hint, 'One click. One real transaction. No wallet.');
   assert.equal(robViewModel(idle, 'allow', url).narrative, 'This is the code it allowed.');
-  const refused = robViewModel({ ...idle, stage: 'refused', message: 'Method on_deposit is private', hash: '11111111111111111111111111111111' }, 'allow', url);
-  assert.deepEqual([refused.status.text, refused.tx.text], ['Refused on chain.', 'The contract refused it on chain: Method on_deposit is private']);
   assert.equal(robViewModel({ ...idle, canAct: false }, 'block', url).button.disabled, true);
+});
+
+const YOCTO = 10n ** 21n; // 0.001 NEAR
+const HASH_TX = '11111111111111111111111111111111';
+
+test('a robbery is the result block: ROBBED in the block tone, the balance jump as numbers, a plain line and the transaction link', () => {
+  const done = { ok: true, canAct: true, stage: 'done', before: String(3048n * YOCTO), after: String(4048n * YOCTO), hash: HASH_TX, message: '' };
+  const m = robViewModel(done, 'block', 'https://explorer.example');
+  assert.deepEqual(m.result, {
+    tone: 'block', word: 'ROBBED', figure: { from: '3.048', to: '4.048', unit: 'NEAR' }, plain: 'A real transaction just forged a balance nobody paid for.', own: '',
+    link: { href: `https://explorer.example/tx/${HASH_TX}`, text: 'View the transaction' },
+  });
+  assert.deepEqual([m.status, m.tx], [{ tone: 'none', text: '' }, null], 'the result block replaces the small status and sentence');
+  const grown = robViewModel({ ...done, before: String(57048n * YOCTO), after: String(58048n * YOCTO) }, 'block', 'https://explorer.example');
+  assert.deepEqual(grown.result.figure, { from: '57.048', to: '58.048', unit: 'NEAR' });
+});
+
+test('a refusal is the same block in the allow tone: REFUSED, a plain line first, the contract\'s own words second', () => {
+  const refused = { ok: true, canAct: true, stage: 'refused', before: String(3048n * YOCTO), after: null, hash: HASH_TX, message: 'Method on_deposit is private' };
+  const m = robViewModel(refused, 'allow', 'https://explorer.example');
+  assert.deepEqual(m.result, {
+    tone: 'allow', word: 'REFUSED', figure: null, plain: 'The fixed code said no. Only the contract itself may run this step.', own: 'The contract\'s own words: "Method on_deposit is private"',
+    link: { href: `https://explorer.example/tx/${HASH_TX}`, text: 'View the transaction' },
+  });
+  assert.deepEqual([m.status, m.tx], [{ tone: 'none', text: '' }, null]);
+});
+
+test('every other rob state stays quiet: small status text, no result block', () => {
+  const base = { ok: true, canAct: true, before: null, after: null, hash: null, message: '' };
+  for (const stage of ['reading', 'pending', 'cannot-pay', 'failed', 'unconfirmed']) assert.equal(robViewModel({ ...base, stage }, 'block', 'https://explorer.example').result, null, stage);
+  assert.equal(robViewModel({ ...base, stage: 'failed', message: 'Nothing was sent.' }, 'block', 'https://explorer.example').tx.text, 'Nothing was sent.');
+});
+
+test('paintRob writes the result as text, builds the numbers as separate spans, hides the block when there is none, and animates only a new result', () => {
+  const doc = fakeDocument();
+  const els = Object.fromEntries(Object.keys(ROB_IDS).map((name) => [name, Object.assign(doc.createElement('div'), { textContent: '', hidden: true })]));
+  const animations = [];
+  els.robCard.animate = (...args) => { animations.push(args); };
+  const done = { ok: true, canAct: true, stage: 'done', before: String(57048n * YOCTO), after: String(58048n * YOCTO), hash: HASH_TX, message: '' };
+  const model = robViewModel(done, 'block', EXPLORER);
+  paintRob(doc, els, model, { animate: true });
+  assert.equal(els.robCard.hidden, false);
+  assert.equal(els.robCard.attrs['data-tone'], 'block');
+  assert.equal(els.robWord.textContent, 'ROBBED');
+  assert.deepEqual(els.robFigure.kids.map((k) => k.kids[0].text), ['57.048', '\u2192', '58.048', 'NEAR']);
+  const links = [];
+  walk(els.robLink, (n) => { if (n.tag === 'a') links.push(n.attrs); });
+  assert.deepEqual(links, [{ href: `${EXPLORER}/tx/${HASH_TX}`, target: '_blank', rel: 'noopener noreferrer' }]);
+  paintRob(doc, els, model, { animate: true });
+  assert.equal(animations.length, 1, 'a repaint of the same result does not replay the entrance');
+  assert.ok(animations[0][1].duration < 300);
+  paintRob(doc, els, robViewModel({ ...done, stage: 'pending' }, 'block', EXPLORER), { animate: true });
+  assert.equal(els.robCard.hidden, true);
+  paintRob(doc, els, robViewModel({ ...done, stage: 'refused', message: '<img src=x onerror=alert(1)>' }, 'allow', EXPLORER), { animate: false });
+  assert.equal(animations.length, 1, 'no entrance without animate');
+  assert.equal(els.robOwn.textContent, 'The contract\'s own words: "<img src=x onerror=alert(1)>"');
+  assert.equal(els.robFigure.kids.length, 0);
+  assert.equal(els.robCard.attrs['data-tone'], 'allow');
+});
+
+test('the page has exactly one element for every Rob it id', async () => {
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
+  for (const id of Object.values(ROB_IDS)) assert.equal(html.split(`id="${id}"`).length, 2, id);
 });

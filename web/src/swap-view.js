@@ -19,6 +19,7 @@ const BUG_LINE = {
 };
 const HINT = {
   loading: 'Press it. The code behind this address changes, live.',
+  resting: 'The code was just swapped. The demo rests a moment between swaps.',
   live: 'Press it. The code behind this address changes, live.',
   recorded: 'Press it to replay a recorded swap of the code behind this address.',
 };
@@ -98,9 +99,10 @@ export function viewModel(state, { now, explorerUrl }) {
 
   const swapping = state.tx !== null && ['pending', 'landing'].includes(state.tx.stage);
   const waitMs = state.waitUntil === null ? 0 : state.waitUntil - now;
+  const resting = mode !== 'recorded' && !swapping && waitMs > 0;
   const button = mode === 'recorded' ? { label: 'Replay a recorded swap', disabled: false }
     : swapping ? { label: 'Swapping...', disabled: true }
-      : waitMs > 0 ? { label: `Swap again in ${Math.ceil(waitMs / 1000)} s`, disabled: true }
+      : resting ? { label: `Ready in ${Math.ceil(waitMs / 1000)} s`, disabled: true }
         : { label: before ? 'Swap it back and watch' : 'Swap the code', disabled: mode !== 'live' };
 
   let tx = null;
@@ -131,7 +133,7 @@ export function viewModel(state, { now, explorerUrl }) {
     before,
     pin,
     agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, step: replay ? state.replay : 0, before: prior }),
-    hint: HINT[mode] ?? '',
+    hint: (resting ? HINT.resting : HINT[mode]) ?? '',
     button,
     tx,
     flips: replay ? (state.replay === 0 ? '' : `Recorded swap ${state.replay} of ${state.recorded.steps.length - 1}`) : mode === 'live' && state.flips !== null ? `Swaps so far: ${state.flips}` : '',
@@ -193,6 +195,10 @@ export function paint(doc, els, model, { animate = false } = {}) {
 
 // "Rob it": ties to the same verdict word the Preflight card shows for the build that is live right now.
 const ROB_NARRATIVE = { block: 'This is the code Preflight said BLOCK to.', allow: 'This is the code it allowed.' };
+const ROB_PLAIN = {
+  done: 'A real transaction just forged a balance nobody paid for.',
+  refused: 'The fixed code said no. Only the contract itself may run this step.',
+};
 const nearAmount = (yocto) => {
   const n = BigInt(yocto ?? 0);
   const whole = n / 10n ** 24n;
@@ -208,17 +214,18 @@ export function robViewModel(robState, pfTone, explorerUrl) {
   const STATUS = {
     reading: ['none', 'Reading the chain.'],
     pending: ['none', 'Sending.'],
-    done: ['block', 'Robbed.'],
-    refused: ['allow', 'Refused on chain.'],
     'cannot-pay': ['warn', 'Out of gas allowance.'],
     failed: ['warn', 'Failed.'],
     unconfirmed: ['warn', 'Not confirmed yet.'],
   };
   const [tone, text] = STATUS[stage] ?? ['none', ''];
+  // A finished rob is the page's payoff, so it gets a result block in the verdict cards' own language, not a line of small text.
+  const result = {
+    done: { tone: 'block', word: 'ROBBED', figure: { from: nearAmount(before), to: nearAmount(after), unit: 'NEAR' }, plain: ROB_PLAIN.done, own: '', link: txLink },
+    refused: { tone: 'allow', word: 'REFUSED', figure: null, plain: ROB_PLAIN.refused, own: `The contract's own words: "${message}"`, link: txLink },
+  }[stage] ?? null;
   const TX = {
     pending: { text: hash ? 'Signed in your browser and sent. Waiting for the network.' : 'Signing in your browser.', link: txLink },
-    done: { text: `A real transaction forged a credit, with no deposit ever made. Balance ${nearAmount(before)} to ${nearAmount(after)} NEAR.`, link: txLink },
-    refused: { text: `The contract refused it on chain: ${message}`, link: txLink },
     'cannot-pay': { text: 'The shared key\'s gas allowance is low right now. It refills automatically; try again in a bit.', link: null },
     failed: { text: message || 'The transaction failed.', link: txLink },
     unconfirmed: { text: `Sent, but not yet confirmed. Check the transaction below; this page keeps reading the chain. ${message}`.trim(), link: txLink },
@@ -229,11 +236,14 @@ export function robViewModel(robState, pfTone, explorerUrl) {
     hint: !ok ? '' : !canAct ? 'This needs the live chain above; it is disabled until that is ready.' : stage === 'idle' ? 'One click. One real transaction. No wallet.' : '',
     status: { tone, text },
     tx: TX[stage] ?? null,
+    result,
   };
 }
 
-/** Writes the "Rob it" panel. */
-export function paintRob(doc, els, model) {
+/** Writes the "Rob it" panel. `animate`: let a new result arrive with a short scale and fade. */
+export function paintRob(doc, els, model, { animate = false } = {}) {
+  const { result } = model;
+  const arrives = result !== null && (els.robCard.hidden || els.robWord.textContent !== result.word);
   els.robNarrative.textContent = model.narrative;
   els.robButton.textContent = model.button.label;
   els.robButton.disabled = model.button.disabled;
@@ -242,6 +252,20 @@ export function paintRob(doc, els, model) {
   els.robStatus.setAttribute('data-tone', model.status.tone);
   els.robTx.replaceChildren(...(!model.tx ? [] : !model.tx.link ? [model.tx.text]
     : [model.tx.text, ' ', h(doc, 'a', { href: model.tx.link.href, target: '_blank', rel: 'noopener noreferrer' }, model.tx.link.text)]));
+  els.robCard.hidden = result === null;
+  if (result) {
+    els.robCard.setAttribute('data-tone', result.tone);
+    els.robWord.textContent = result.word;
+    // Each number is its own unbreakable span, so a narrow screen wraps between them and never inside one.
+    els.robFigure.replaceChildren(...(!result.figure ? [] : [
+      h(doc, 'span', { class: 'rob-num' }, result.figure.from), h(doc, 'span', { class: 'rob-arrow' }, '\u2192'),
+      h(doc, 'span', { class: 'rob-num' }, result.figure.to), h(doc, 'span', { class: 'rob-unit' }, result.figure.unit),
+    ]));
+    els.robPlain.textContent = result.plain;
+    els.robOwn.textContent = result.own;
+    els.robLink.replaceChildren(...(result.link ? [h(doc, 'a', { href: result.link.href, target: '_blank', rel: 'noopener noreferrer' }, result.link.text)] : []));
+  }
+  if (animate && arrives) els.robCard.animate?.([{ opacity: 0, transform: 'scale(0.96)' }, { opacity: 1, transform: 'none' }], { duration: 260, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' });
 }
 
 export const IDS = {
@@ -252,7 +276,10 @@ export const IDS = {
   button: 'swap-button', hint: 'swap-hint', flips: 'swap-flips', tx: 'swap-tx',
 };
 
-export const ROB_IDS = { robNarrative: 'rob-narrative', robButton: 'rob-button', robHint: 'rob-hint', robStatus: 'rob-status', robTx: 'rob-tx' };
+export const ROB_IDS = {
+  robNarrative: 'rob-narrative', robButton: 'rob-button', robHint: 'rob-hint', robStatus: 'rob-status', robTx: 'rob-tx',
+  robCard: 'rob-card', robWord: 'rob-word', robFigure: 'rob-figure', robPlain: 'rob-plain', robOwn: 'rob-own', robLink: 'rob-link',
+};
 
 /** Starts the section on the page and returns its controller. Never throws: whatever goes wrong, the section shows a state that says so. */
 export async function mountSwap(doc = document, config = SWAP_CONFIG) {
@@ -272,7 +299,7 @@ export async function mountSwap(doc = document, config = SWAP_CONFIG) {
   let shown = '';
   let pfTone = 'none';
   // "Rob it" paints on its own clicks too (signing and sending take a moment); it never polls the chain by itself.
-  const renderRob = () => paintRob(doc, robEls, robViewModel(rob.getState(), pfTone, config.explorerUrl));
+  const renderRob = () => paintRob(doc, robEls, robViewModel(rob.getState(), pfTone, config.explorerUrl), { animate: !calm });
   const render = () => {
     const state = swap.getState();
     const model = viewModel(state, { now: Date.now(), explorerUrl: config.explorerUrl });
