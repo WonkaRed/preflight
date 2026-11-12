@@ -232,16 +232,17 @@ async function verifiedHash(env, cfg, net, claimed, seen) {
 }
 
 /**
- * The build that is not live, as the registry sees it, once at least one swap has happened and the switch agrees which build is live (so the
- * other build did run at this address until the last swap). Null when it cannot be told or read: it is context for the live verdict, never a reason to fail the read.
+ * The build that is not live, with the registry's verdict on it, read from the chain every time (never from a recording), so the page can show
+ * what a swap would turn the code into. Null when the live code is neither build or the verdict cannot be read: it is context for the live
+ * verdict, never a reason to fail the read.
  */
-async function otherBuild(net, cfg, status, codeHash, blockMs, now) {
+async function otherBuild(net, cfg, status, codeHash) {
   const live = BUILDS.find((name) => status.hashes[name] === codeHash);
+  if (live === undefined) return null;
   const build = BUILDS.find((name) => name !== live);
-  if (live === undefined || status.live !== live || status.flips === 0 || status.lastFlipMs === 0 || status.lastFlipMs > blockMs) return null;
   const hash = status.hashes[build];
   try {
-    return { build, codeHash: hash, verdict: parseVerdict(await callView(net, cfg.registryId, 'get_verdict', { code_hash: hash }), hash), swappedAt: now - (blockMs - status.lastFlipMs), lastFlipMs: status.lastFlipMs, txHash: null };
+    return { build, codeHash: hash, verdict: parseVerdict(await callView(net, cfg.registryId, 'get_verdict', { code_hash: hash }), hash) };
   } catch {
     return null;
   }
@@ -263,13 +264,17 @@ async function readOnce(env, cfg, net, seen) {
   const codeHash = await verifiedHash(env, cfg, net, account.code_hash, seen);
   const verdict = parseVerdict(await callView(net, cfg.registryId, 'get_verdict', { code_hash: codeHash }), codeHash);
   const remaining = status.nextFlipMs - blockMs;
-  // A live BLOCK needs no context; any other verdict is shown beside what the registry said about the build that ran before.
-  const before = verdict.decision === 'BLOCK' ? null : await otherBuild(net, cfg, status, codeHash, blockMs, env.now());
+  const build = BUILDS.find((name) => status.hashes[name] === codeHash) ?? null;
+  const other = await otherBuild(net, cfg, status, codeHash);
+  // A live BLOCK needs no context; any other verdict is shown beside what the registry said about the build that ran before, once at least
+  // one swap has happened and the switch agrees which build is live (so the other build did run at this address until the last swap).
+  const swapped = other && verdict.decision !== 'BLOCK' && status.live === build && status.flips > 0 && status.lastFlipMs > 0 && status.lastFlipMs <= blockMs;
   return {
     codeHash,
-    build: BUILDS.find((name) => status.hashes[name] === codeHash) ?? null,
+    build,
     verdict,
-    before,
+    other,
+    before: swapped ? { ...other, swappedAt: env.now() - (blockMs - status.lastFlipMs), lastFlipMs: status.lastFlipMs, txHash: null } : null,
     flips: status.flips,
     waitUntil: remaining > 0 ? env.now() + remaining + COUNTDOWN_MARGIN_MS : null,
     latest: Number.isSafeInteger(block.header.height) ? { height: block.header.height, ms: blockMs } : null,
@@ -381,6 +386,7 @@ const defaults = () => ({
  *              replays the bundled recording, 'empty' means there is neither a live contract nor a recording.
  * state.reason why the mode is not live: 'unconfigured' | 'rpc-down' | 'cannot-pay' (the demo key can no longer pay for swaps).
  * state.tx     the swap this visitor sent: { stage: 'pending' | 'landing' | 'done' | 'unseen' | 'failed' | 'unconfirmed', hash, message }.
+ * state.other   the build that is not live, as `{ build, codeHash, verdict }` from the registry just now, or null when it could not be read.
  * state.before  while live code is not a BLOCK and a swap has happened: the build that ran at this address until the last swap, as `{ build, codeHash, verdict, swappedAt (local epoch ms), lastFlipMs, txHash }`, else null. `txHash` is the last swap's transaction, once found on chain.
  * state.waitUntil  local epoch ms before which the contract will refuse another swap, or null.
  * state.replay  the recording's current step (0 is before its first swap).
@@ -398,7 +404,7 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
   let state = {
     mode: 'loading', reason: null, detail: '', recorded, replay: 0,
     address: config.chameleonId || recorded?.chameleonId || null,
-    codeHash: null, build: null, verdict: null, before: null, flips: null, waitUntil: null, tx: null, reconnecting: false, endpoint: null,
+    codeHash: null, build: null, verdict: null, other: null, before: null, flips: null, waitUntil: null, tx: null, reconnecting: false, endpoint: null,
     arrival: null, keys: null,
   };
   let cancelTimer = () => {};

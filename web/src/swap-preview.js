@@ -25,7 +25,7 @@ export function createPreview({ calm = false, onChange = () => {}, schedule = (f
 
   return {
     stage: () => stage,
-    /** `live` is `{ hash }` while the page offers the preview (fixed code live, a recorded bad build to show), else null. */
+    /** `live` is `{ hash }` while the page offers the preview (fixed code live, with the vulnerable build read live to show), else null. */
     sync(live) {
       if (over) return;
       if (began !== null && (!live || live.hash !== began)) { stop(); return; }

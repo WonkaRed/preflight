@@ -31,24 +31,26 @@ const SOURCE = { live: 'Live read', recorded: 'Recorded' };
 const verdictText = (verdict) => (verdict.registered
   ? `${STATUS_OF[verdict.decision]}${verdict.ruleIds.length ? ` (${verdict.ruleIds.join(', ')})` : ''}`
   : 'none: unaudited code, or code changed since its audit');
-/** The first recorded step with this decision: the other build's side of the story when the chain is not showing it. */
+/** The first recorded step with this decision: the other build's side of the story, for a recording only (a live page never takes a hash from one). */
 const recordedStep = (recorded, decision) => recorded?.steps.find((step) => step.decision === decision) ?? null;
 
 /**
  * What the panel shows: always two beats, whatever the live state. Today the fixed code is ALLOWED; then the owner swaps the
- * code at the same address and the guard REFUSES. Each beat is the live verdict when the code live right now has that decision
- * and the recorded one otherwise, and says which (`source`). `show` is false when there is no address to name (the section
+ * code at the same address and the guard REFUSES. Live, each beat is the verdict of the code live right now when it
+ * has that decision and otherwise the registry's verdict for the other build (`other`, read from the chain with it); a live page never
+ * takes a hash or a verdict from the recording. In a recording, each beat is its first step with that decision. `source` says which. `show` is false when there is no address to name (the section
  * hides). `key` is null until a verdict is known; the panel plays again when it changes. `at` (epoch ms) stamps the log line
  * only for a live check. `today` is null when no verdict can be shown for it; `swapped` is null when no refusal is on record
  * and the live code is not one (the panel then shows today alone and claims nothing more).
  */
-export function agentScript({ mode, address, verdict, codeHash, at, recorded = null }) {
+export function agentScript({ mode, address, verdict, codeHash, at, other = null, recorded = null }) {
   if (!address) return { show: false, key: null };
   const call = `${address}.${CALL.method} with ${CALL.label}`;
   if (!['live', 'recorded'].includes(mode) || !verdict || !codeHash) return { show: true, key: null, address, call };
   const live = mode === 'live' ? { source: 'live', verdict, codeHash } : null;
+  const otherBeat = other && { source: 'live', verdict: other.verdict, codeHash: other.codeHash };
   const recordedBeat = (decision) => { const step = recordedStep(recorded, decision); return step && { source: 'recorded', verdict: step, codeHash: step.codeHash }; };
-  const beat = (decision) => (live?.verdict.decision === decision ? live : recordedBeat(decision));
+  const beat = (decision) => (!live ? recordedBeat(decision) : live.verdict.decision === decision ? live : otherBeat?.verdict.decision === decision ? otherBeat : null);
   const fixed = beat('ALLOW') ?? live;
   const bad = beat('BLOCK');
   const today = fixed && {
@@ -58,10 +60,10 @@ export function agentScript({ mode, address, verdict, codeHash, at, recorded = n
   };
   const swapped = bad && {
     ...OUTCOME.BLOCK, source: bad.source, hash: bad.codeHash, verdict: verdictText(bad.verdict), why: harm(bad.verdict),
-    log: JSON.stringify(guardEntry({ contract: address, method: CALL.method, deposit: CALL.deposit, codeHash: bad.codeHash, verdict: bad.verdict, at: bad.source === 'live' ? at : null }), null, 2),
-    note: `${NOTE[bad.source]}${bad.source === 'recorded' && live && live.verdict.decision !== 'ALLOW' ? ' A live check of the code deployed right now would decline it (a Warn, or no verdict).' : ''}`,
+    log: JSON.stringify(guardEntry({ contract: address, method: CALL.method, deposit: CALL.deposit, codeHash: bad.codeHash, verdict: bad.verdict, at: bad === live ? at : null }), null, 2),
+    note: NOTE[bad.source],
   };
-  return { show: true, key: `${mode}|${address}|${today?.source}:${today?.hash}|${swapped?.source}:${swapped?.hash}`, address, call, today, swapped };
+  return { show: true, key: `${mode}|${address}|${live?.codeHash}|${today?.source}:${today?.hash}|${swapped?.source}:${swapped?.hash}`, address, call, today, swapped };
 }
 
 /**

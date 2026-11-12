@@ -208,8 +208,31 @@ test('no contrast data when the vulnerable build is live, when nothing was ever 
   const { swap, state } = setup(chain);
   chain.build = 'vulnerable';
   await swap.refresh();
-  assert.equal(chain.calls.filter((c) => c.params?.method_name === 'get_verdict').length, 1, 'a live BLOCK needs no second registry read');
-  assert.equal(state().before, null);
+  assert.equal(chain.calls.filter((c) => c.params?.method_name === 'get_verdict').length, 2, 'the live verdict and the other build\'s');
+  assert.equal(state().before, null, 'a live BLOCK has no contrast');
+  assert.deepEqual([state().other.build, state().other.codeHash, state().other.verdict.decision], ['patched', HASH.patched, 'ALLOW'], 'the other build is still read, for the agent panel');
+});
+
+test('the other build is read from status() and the registry whatever the swap history, and is null when it cannot be read', async () => {
+  const fresh = fakeChain();
+  fresh.build = 'patched';
+  fresh.flips = 0;
+  const first = setup(fresh);
+  await first.swap.refresh();
+  assert.equal(first.state().before, null, 'nothing was swapped yet');
+  assert.deepEqual([first.state().other.build, first.state().other.codeHash, first.state().other.verdict.decision, first.state().other.verdict.ruleIds], ['vulnerable', HASH.vulnerable, 'BLOCK', ['PF001']]);
+  const unread = fakeChain();
+  unread.build = 'patched';
+  delete unread.verdicts[HASH.vulnerable];
+  const second = setup(unread);
+  await second.swap.refresh();
+  assert.equal(second.state().other.verdict.registered, false, 'no verdict is a Warn, as the card shows it');
+  const broken = fakeChain();
+  broken.build = 'patched';
+  broken.verdicts[HASH.vulnerable] = { code_hash: 'x', status: 'Unsafe', rule_ids: [] };
+  const third = setup(broken);
+  await third.swap.refresh();
+  assert.deepEqual([third.state().mode, third.state().other], ['live', null], 'a malformed other verdict never fails the read');
 });
 
 test('the contrast goes away when the visitor swaps back to the vulnerable build', async () => {

@@ -376,14 +376,21 @@ test('one line says there are no admin keys and how many times the code changed,
   assert.equal(view({ ...createSwap({ config: CONFIG, recorded }).getState(), mode: 'recorded', reason: 'rpc-down' }).keys, 'No admin keys, and its code still changes.', 'a recording claims no live count');
 });
 
-test('the preview is offered only on the fixed code, with a recorded bad build to show, and every stage is labelled', async () => {
+test('the preview is offered only on the fixed code, and its bad build is the live status() hash with its live registry verdict, never the recording', async () => {
   const safe = view((await liveState('patched')).state);
   assert.equal(safe.preview.hash, HASH.patched);
-  assert.deepEqual([safe.preview.bad.word, safe.preview.bad.tone, safe.preview.bad.hash, safe.preview.bad.rules], ['BLOCK', 'block', 'FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i', 'PF001']);
+  assert.deepEqual([safe.preview.bad.word, safe.preview.bad.tone, safe.preview.bad.hash, safe.preview.bad.rules, safe.preview.bad.build], ['BLOCK', 'block', HASH.vulnerable, 'PF001', 'Vulnerable build']);
+  const recordedBad = recorded.steps.find((step) => step.decision === 'BLOCK').codeHash;
+  assert.notEqual(recordedBad, HASH.vulnerable, 'the recording is of other code than the chain holds, as after a redeploy');
+  assert.equal(safe.preview.bad.hash, (await liveState('patched')).state.other.codeHash, 'the hash comes from the chain read');
   assert.equal(safe.previewNote, '', 'the live model alone is never labelled a preview');
   assert.equal(view((await liveState('vulnerable')).state).preview, null);
-  assert.equal(view({ ...(await liveState('patched')).state, recorded: null }).preview, null, 'no recording, no preview: nothing is invented');
-  assert.equal(view({ ...(await liveState('patched')).state, mode: 'recorded', reason: 'rpc-down' }).preview, null);
+  const state = (await liveState('patched')).state;
+  assert.equal(view({ ...state, recorded: null }).preview.bad.hash, HASH.vulnerable, 'the recording is not needed for it');
+  assert.equal(view({ ...state, other: null }).preview, null, 'the other build unread: no preview, and the recording does not fill in');
+  const unaudited = (await liveState('patched', (chain) => { delete chain.verdicts[HASH.vulnerable]; })).state;
+  assert.equal(view(unaudited).preview, null, 'a build the registry does not call unsafe is not shown as BLOCK');
+  assert.equal(view({ ...state, mode: 'recorded', reason: 'rpc-down' }).preview, null);
   const stages = Object.fromEntries(['safe', 'swap', 'bad', 'still'].map((stage) => [stage, withPreview(safe, stage)]));
   assert.ok(Object.values(stages).every((m) => m.previewNote.startsWith('Preview.')));
   assert.deepEqual([stages.safe.pf.word, stages.swap.pf.word, stages.swap.pf.hash, stages.bad.pf.word, stages.still.pf.word], ['ALLOW', 'ALLOW', safe.preview.bad.hash, 'BLOCK', 'ALLOW']);

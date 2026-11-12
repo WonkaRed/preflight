@@ -51,7 +51,7 @@ test('copy: clicking a marked hash copies its full text and says so for a moment
   let handler;
   const doc = { addEventListener: (type, fn) => { if (type === 'click') handler = fn; } };
   const attrs = new Set();
-  const hash = { textContent: 'CNtPsVA7xqz', setAttribute: (name) => attrs.add(name), removeAttribute: (name) => attrs.delete(name) };
+  const hash = { textContent: 'Qm4xKp9Zrtq', setAttribute: (name) => attrs.add(name), removeAttribute: (name) => attrs.delete(name) };
   const target = { closest: (selector) => (selector === '[data-copy]' ? hash : null) };
   const copied = [];
   const timers = [];
@@ -59,7 +59,7 @@ test('copy: clicking a marked hash copies its full text and says so for a moment
   await handler({ target: { closest: () => null } });
   assert.deepEqual(copied, [], 'a click elsewhere copies nothing');
   await handler({ target });
-  assert.deepEqual(copied, ['CNtPsVA7xqz']);
+  assert.deepEqual(copied, ['Qm4xKp9Zrtq']);
   assert.ok(attrs.has('data-copied'));
   timers[0]();
   assert.ok(!attrs.has('data-copied'));

@@ -25,14 +25,15 @@ const script = (state, at = AT) => viewModel(state, { now: at, explorerUrl: 'htt
 
 // ---- What the agent's check says -----------------------------------------------------------------------------------
 // The story is always two beats: today's fixed code is ALLOWED, then the owner swaps the code and the guard REFUSES. Each beat
-// is the live verdict when the code live right now has that decision, and the recorded one otherwise, and says which.
+// is the live verdict when the code live right now has that decision, and otherwise the registry's live verdict for the other build.
+// A live page never takes a hash or a verdict from the recording; only a page showing the recording does.
 
-const RECORDED_BAD = { hash: 'FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i', reasons: ['registry verdict Unsafe (PF001): report https://example.com/r'] };
+const RECORDED_BAD = { hash: 'BdwanDy6MTKYtwqqYZ5pqKDFrwhKGV76VRk6PAmEuTTd', reasons: ['registry verdict Unsafe (PF001): report https://example.com/r'] };
 
-test('bad build live: the refusal is the live verdict, with the live hash and rule and the guard\'s log line in the guard\'s order; today\'s ALLOWED is the recording', async () => {
+test('bad build live: the refusal is the live verdict, with the live hash and rule and the guard\'s log line in the guard\'s order; today\'s ALLOWED is the registry\'s live verdict for the fixed build', async () => {
   const a = script(await live('vulnerable'));
   assert.deepEqual([a.swapped.word, a.swapped.tone, a.swapped.source, a.swapped.verdict, a.swapped.hash], ['REFUSED', 'block', 'live', 'Unsafe (PF001)', HASH.vulnerable]);
-  assert.deepEqual([a.today.word, a.today.tone, a.today.source, a.today.hash, a.today.verdict], ['ALLOWED', 'allow', 'recorded', HASH.patched, 'Safe']);
+  assert.deepEqual([a.today.word, a.today.tone, a.today.source, a.today.hash, a.today.verdict], ['ALLOWED', 'allow', 'live', HASH.patched, 'Safe']);
   assert.equal(a.call, `${ADDRESS}.deposit with 0.5 NEAR`);
   const entry = JSON.parse(a.swapped.log);
   assert.deepEqual(Object.keys(entry), ['timestamp', 'contract', 'method', 'deposit', 'codeHash', 'decision', 'outcome', 'reasons']);
@@ -47,36 +48,40 @@ test('bad build live: the refusal is the live verdict, with the live hash and ru
   assert.match(a.swapped.log, /\n  "decision": "block",\n/, 'one field per line, so the log wraps at fields and not mid-word');
 });
 
-test('fixed code live (the page\'s default): it still ends on REFUSED, from the recorded bad-build verdict, labelled recorded, with no time claimed', async () => {
+test('fixed code live (the page\'s default): it still ends on REFUSED, from the registry\'s live verdict for the vulnerable build (never the recording), with no time claimed', async () => {
   const a = script(await live('patched'));
   assert.deepEqual([a.today.word, a.today.source, a.today.hash, a.today.verdict, a.today.when, a.today.line], ['ALLOWED', 'live', HASH.patched, 'Safe', 'Today: fixed code.', 'Fixed code. Payment goes through.']);
-  assert.deepEqual([a.swapped.word, a.swapped.tone, a.swapped.source, a.swapped.hash, a.swapped.verdict], ['REFUSED', 'block', 'recorded', RECORDED_BAD.hash, 'Unsafe (PF001)']);
+  assert.deepEqual([a.swapped.word, a.swapped.tone, a.swapped.source, a.swapped.hash, a.swapped.verdict], ['REFUSED', 'block', 'live', HASH.vulnerable, 'Unsafe (PF001)']);
+  assert.notEqual(a.swapped.hash, RECORDED_BAD.hash, 'the recording holds another hash: it must not reach a live page');
   const entry = JSON.parse(a.swapped.log);
-  assert.deepEqual([entry.timestamp, entry.decision, entry.outcome, entry.codeHash, entry.reasons], [undefined, 'block', 'refused', RECORDED_BAD.hash, RECORDED_BAD.reasons]);
-  assert.match(a.swapped.note, /^Composed from the recorded verdict, not a live check/);
+  assert.deepEqual([entry.timestamp, entry.decision, entry.outcome, entry.codeHash, entry.reasons], [undefined, 'block', 'refused', HASH.vulnerable,
+    ['registry verdict Unsafe (PF001): published by auditor.example.testnet, report https://example.com/vulnerable.json']], 'no check ran on this code now, so no time is claimed');
+  assert.match(a.swapped.note, /^Composed here from the live reads above/);
+  assert.doesNotMatch(JSON.stringify(a), new RegExp(RECORDED_BAD.hash));
   assert.doesNotMatch(JSON.stringify(a), /right answer for this code/, 'the long ALLOWED paragraph is gone');
 });
 
-test('the beats take the live verdict only when the live code has that decision, so the panel never says live about code that is not live', async () => {
+test('the beats are live verdicts whichever build is live, so the panel never shows a hash the chain does not hold', async () => {
   const safe = script(await live('patched'));
   const bad = script(await live('vulnerable'));
-  assert.deepEqual([safe.today.source, safe.swapped.source, bad.today.source, bad.swapped.source], ['live', 'recorded', 'recorded', 'live']);
-  assert.notEqual(safe.key, bad.key, 'the panel plays again when a swap changes which beat is live');
+  assert.deepEqual([safe.today.source, safe.swapped.source, bad.today.source, bad.swapped.source], ['live', 'live', 'live', 'live']);
+  assert.deepEqual([safe.today.hash, safe.swapped.hash], [bad.today.hash, bad.swapped.hash], 'the same two builds, whichever is live');
+  assert.notEqual(safe.key, bad.key, 'the panel plays again when a swap changes which beat is the live code');
   assert.equal(safe.key, script(await live('patched')).key, 'and a poll that read the same code changes nothing');
   assert.equal(safe.key, script(await live('patched', (chain) => { chain.lastFlipMs = chain.nowMs - 5 * 60_000; })).key, 'a swap on record is not a different story');
 });
 
-test('code with no verdict live: both beats are the recording, and the note says a live check would decline it', async () => {
+test('code with no verdict live: no refusal is claimed and the recording is not consulted; today is the other build\'s live verdict', async () => {
   const a = script(await live('vulnerable', (chain) => { delete chain.verdicts[HASH.vulnerable]; }));
-  assert.deepEqual([a.today.source, a.today.word, a.swapped.source, a.swapped.word], ['recorded', 'ALLOWED', 'recorded', 'REFUSED']);
-  assert.match(a.swapped.note, /A live check of the code deployed right now would decline it \(a Warn, or no verdict\)\.$/);
+  assert.deepEqual([a.today.source, a.today.word, a.today.hash, a.swapped], ['live', 'ALLOWED', HASH.patched, null]);
 });
 
-test('no recording and no refusal live: today is shown alone and nothing more is claimed; with no verdict at all there is only today\'s decline', async () => {
-  const safe = { ...(await live('patched')), recorded: null };
+test('the other build cannot be read: a live page shows only what it knows, and the recording fills nothing in', async () => {
+  const safe = { ...(await live('patched')), other: null };
+  assert.ok(safe.recorded, 'a recording is bundled');
   const a = script(safe);
   assert.deepEqual([a.today.word, a.today.source, a.swapped], ['ALLOWED', 'live', null]);
-  const unaudited = script({ ...(await live('vulnerable', (chain) => { delete chain.verdicts[HASH.vulnerable]; })), recorded: null });
+  const unaudited = script({ ...(await live('vulnerable', (chain) => { delete chain.verdicts[HASH.vulnerable]; })), other: null });
   assert.deepEqual([unaudited.today.word, unaudited.today.tone, unaudited.today.when, unaudited.swapped], ['DECLINED', 'warn', 'Today: no verdict for this code.', null]);
 });
 
@@ -174,10 +179,10 @@ test('a swap replays only the check and the outcome, and the same verdict read a
   assert.deepEqual(rows(), ['on', 'on', 'on', 'off', 'off'], 'the agent stays, the guard check starts over');
   advance(10_000);
   assert.deepEqual([els.get('agent-word').textContent, els.get('agent-out').attrs['data-tone'], els.get('agent-verdict').textContent, els.get('agent-src').textContent, els.get('agent-today-src').textContent, rows().join()],
-    ['REFUSED', 'block', 'Unsafe (PF001)', 'Recorded', 'Live read', 'on,on,on,on,on'], 'the story still ends on the refusal; now the recording says so, and today is the live read');
+    ['REFUSED', 'block', 'Unsafe (PF001)', 'Live read', 'Live read', 'on,on,on,on,on'], 'the story still ends on the refusal, read live from the registry, and today is the live read');
   agent.update(vulnerable);
   advance(10_000);
-  assert.deepEqual([els.get('agent-word').textContent, els.get('agent-src').textContent, els.get('agent-today-src').textContent], ['REFUSED', 'Live read', 'Recorded'], 'and back');
+  assert.deepEqual([els.get('agent-word').textContent, els.get('agent-src').textContent, els.get('agent-today-src').textContent], ['REFUSED', 'Live read', 'Live read'], 'and back');
 });
 
 test('reduced motion: the final state at once, and no timer is ever set', async () => {
@@ -186,17 +191,17 @@ test('reduced motion: the final state at once, and no timer is ever set', async 
   assert.equal(rows().join(), 'on,on,on,on,on');
   assert.equal(els.get('agent-word').textContent, 'REFUSED');
   agent.update(script(await live('patched')));
-  assert.deepEqual([els.get('agent-word').textContent, els.get('agent-src').textContent, rows().join()], ['REFUSED', 'Recorded', 'on,on,on,on,on']);
+  assert.deepEqual([els.get('agent-word').textContent, els.get('agent-src').textContent, rows().join()], ['REFUSED', 'Live read', 'on,on,on,on,on']);
   assert.equal(timers.length, 0);
 });
 
 test('with no refusal to show, the outcome row is hidden and today stays', async () => {
   const { agent, els, rows, advance } = panel();
-  agent.update(script({ ...(await live('patched')), recorded: null }));
+  agent.update(script({ ...(await live('patched')), other: null }));
   advance(10_000);
   assert.deepEqual([els.get('agent-row-out').hidden, els.get('agent-row-check').hidden, els.get('agent-today-word').textContent], [true, false, 'ALLOWED']);
   agent.update(script(await live('patched')));
-  assert.equal(els.get('agent-row-out').hidden, false, 'a refusal on record brings it back');
+  assert.equal(els.get('agent-row-out').hidden, false, 'a readable other build brings it back');
 });
 
 test('the section hides when there is no address, shows again with one, and the replay button plays everything again', async () => {
@@ -224,7 +229,7 @@ test('the staging waits until the panel is on screen, then plays from the first 
   agent.update(script(await live('patched')));
   seen();
   advance(10_000);
-  assert.deepEqual([els.get('agent-today-src').textContent, els.get('agent-src').textContent, rows().join()], ['Live read', 'Recorded', 'on,on,on,on,on'], 'the latest verdict, not the one read first');
+  assert.deepEqual([els.get('agent-today-src').textContent, els.get('agent-src').textContent, rows().join()], ['Live read', 'Live read', 'on,on,on,on,on'], 'the latest verdict, not the one read first');
   agent.update(script(await live('vulnerable')));
   assert.equal(rows().join(), 'on,on,on,off,off', 'once seen, a swap replays the check at once');
 });

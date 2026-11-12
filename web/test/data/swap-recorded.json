@@ -15,7 +15,7 @@
       "signer": "switch.example.testnet",
       "before": {
         "live": "vulnerable",
-        "codeHash": "FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i",
+        "codeHash": "BdwanDy6MTKYtwqqYZ5pqKDFrwhKGV76VRk6PAmEuTTd",
         "decision": "block",
         "verdict": {
           "status": "Unsafe",
@@ -27,7 +27,7 @@
       },
       "after": {
         "live": "patched",
-        "codeHash": "89eehheG1Upb3mJpkuuCUXcqFSavP7wch7vroQrvLNZQ",
+        "codeHash": "6sL3fhMi6nHs7PHC4Evkoztir7zrzk5uaH2bCK4nUwAc",
         "decision": "allow",
         "verdict": {
           "status": "Safe",
@@ -45,7 +45,7 @@
       "signer": "switch.example.testnet",
       "before": {
         "live": "patched",
-        "codeHash": "89eehheG1Upb3mJpkuuCUXcqFSavP7wch7vroQrvLNZQ",
+        "codeHash": "6sL3fhMi6nHs7PHC4Evkoztir7zrzk5uaH2bCK4nUwAc",
         "decision": "allow",
         "verdict": {
           "status": "Safe",
@@ -55,7 +55,7 @@
       },
       "after": {
         "live": "vulnerable",
-        "codeHash": "FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i",
+        "codeHash": "BdwanDy6MTKYtwqqYZ5pqKDFrwhKGV76VRk6PAmEuTTd",
         "decision": "block",
         "verdict": {
           "status": "Unsafe",
@@ -75,7 +75,7 @@
       "signer": "switch.example.testnet",
       "before": {
         "live": "vulnerable",
-        "codeHash": "FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i",
+        "codeHash": "BdwanDy6MTKYtwqqYZ5pqKDFrwhKGV76VRk6PAmEuTTd",
         "decision": "block",
         "verdict": {
           "status": "Unsafe",
@@ -87,7 +87,7 @@
       },
       "after": {
         "live": "patched",
-        "codeHash": "89eehheG1Upb3mJpkuuCUXcqFSavP7wch7vroQrvLNZQ",
+        "codeHash": "6sL3fhMi6nHs7PHC4Evkoztir7zrzk5uaH2bCK4nUwAc",
         "decision": "allow",
         "verdict": {
           "status": "Safe",
@@ -105,7 +105,7 @@
       "signer": "switch.example.testnet",
       "before": {
         "live": "patched",
-        "codeHash": "89eehheG1Upb3mJpkuuCUXcqFSavP7wch7vroQrvLNZQ",
+        "codeHash": "6sL3fhMi6nHs7PHC4Evkoztir7zrzk5uaH2bCK4nUwAc",
         "decision": "allow",
         "verdict": {
           "status": "Safe",
@@ -115,7 +115,7 @@
       },
       "after": {
         "live": "vulnerable",
-        "codeHash": "FzLo9WN2CbEyCHZVdwLpizuSRGhp1Tkx95zsmPLp6J7i",
+        "codeHash": "BdwanDy6MTKYtwqqYZ5pqKDFrwhKGV76VRk6PAmEuTTd",
         "decision": "block",
         "verdict": {
           "status": "Unsafe",

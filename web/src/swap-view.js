@@ -63,10 +63,10 @@ const STATUS = {
     : 'No live contract is set up in this copy of the page, and no recording is bundled.'),
 };
 
-/** What the hero's preview needs: the recorded run's bad build to turn the card into, or null when there is none to show. */
+/** What the hero's preview needs: the vulnerable build as the chain's status() and the registry show it right now (never a recording), or null when it is not a BLOCK or could not be read. */
 function previewOf(state) {
-  const bad = state.recorded?.steps.find((step) => step.decision === 'BLOCK');
-  return bad ? { hash: state.codeHash, bad: pfOf(bad, bad) } : null;
+  const bad = state.other;
+  return bad?.build === 'vulnerable' && bad.verdict.decision === 'BLOCK' ? { hash: state.codeHash, bad: pfOf(bad, bad.verdict) } : null;
 }
 const NO_PF = { tone: 'none', word: '', rules: '', ruleWords: '', line: '', tech: '', tag: { text: '', state: 'none' }, build: '', hash: '' };
 /** The Preflight card for a code (`shown`: its build and hash) and the registry verdict for it. */
@@ -157,7 +157,7 @@ export function viewModel(state, { now, explorerUrl }) {
     pf,
     before,
     pin,
-    agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, recorded: state.recorded }),
+    agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, other: state.other, recorded: state.recorded }),
     loading: mode === 'loading',
     keys: `No admin keys, and its code still ${mode === 'live' && state.flips !== null ? `changed ${plural(state.flips, 'time')}` : 'changes'}.`,
     previewNote: '',
