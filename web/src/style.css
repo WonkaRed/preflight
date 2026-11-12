@@ -141,7 +141,8 @@ a { color: var(--focus); }
 .filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin: 1.25rem 0 0; color: var(--muted); }
 .filterbar .btn { padding: 0.25rem 0.7rem; font-size: 0.9rem; }
 .group { margin-top: 1.6rem; }
-.ghead { position: sticky; top: 0; z-index: 2; margin: 0 0 0.5rem; padding: 0.55rem 0; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 0.6rem; font: 800 1.2rem/1.2 var(--sans); letter-spacing: -0.02em; }
+.ghead { margin: 0 0 0.5rem; padding: 0.55rem 0; background: var(--bg); border-bottom: 1px solid var(--line); display: flex; align-items: baseline; gap: 0.6rem; font: 800 1.2rem/1.2 var(--sans); letter-spacing: -0.02em; }
+@media (min-width: 44rem) { .ghead { position: sticky; top: 0; z-index: 2; } } /* on a phone the bar would sit over the card it names */
 .gcount { font: 600 0.95rem/1 var(--sans); color: var(--sev); }
 .flist { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.65rem; }
 .finding {
@@ -226,14 +227,8 @@ a { color: var(--focus); }
 .addr a:hover { text-decoration: underline; }
 .looked { margin: 0.5rem 0 0; color: var(--c-sub); font-size: 0.9rem; line-height: 1.4; }
 .hash-none { padding: 0.1em 0.5em; border: 1px dashed color-mix(in srgb, currentColor 45%, transparent); border-radius: 5px; font: 0.85em/1.5 var(--mono); }
-/* The preview is never live: it says so in the header, in a line under the verdict, and with a dashed edge. */
-.preview-pill { padding: 0.1rem 0.6rem; border: 1.5px dashed currentColor; border-radius: 99px; font: 700 0.78rem/1.4 var(--sans); }
-.preview-note { margin: 0.5rem 0 0; color: var(--c-sub); font-size: 0.9rem; line-height: 1.4; }
-/* The three stages' notes keep their lines, so the loop moves nothing: two lines, or one where the card is wide enough for the longest. */
-.card[data-preview=on] .preview-note { min-height: 2.8em; }
-@media (min-width: 75rem) { .card[data-preview=on] .preview-note { min-height: 1.4em; } }
-@media (min-width: 44rem) and (max-width: 74.99rem) { .card[data-preview=on] .card-line { min-height: 4.4em; } }
-.card[data-preview=on] { border-style: dashed; border-width: 2px; }
+/* What a swap would do, a line under the Preflight verdict. It is a condition ("If ..."), never a second verdict. */
+.swap-note { margin: 0.5rem 0 0; color: var(--c-sub); font-size: 0.9rem; line-height: 1.4; }
 .card-sub { margin: 0.2rem 0 0; color: var(--c-sub); font-size: 0.88rem; line-height: 1.4; }
 .word { margin: 0.6rem 0 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.2rem 0.9rem; font: 800 clamp(3rem, 8vw, 5rem)/0.95 var(--display); letter-spacing: -0.02em; }
 .card[data-tone=trust] .word { color: var(--muted); }
@@ -253,7 +248,8 @@ a { color: var(--focus); }
 .swap-next a { color: var(--ink); text-underline-offset: 0.25em; }
 .fine { margin-top: 1rem; color: var(--muted); font-size: 0.88rem; }
 .swap-print { margin: 0.5rem 0 0; max-width: 56rem; line-height: 1.5; }
-#swap-keys { margin-top: 1rem; font-weight: 650; }
+.swap-also { margin: 1.1rem 0 0; max-width: 56rem; line-height: 1.5; }
+#swap-keys { margin-top: 0.6rem; font-weight: 650; }
 
 /* "Rob it": a real testnet transaction, run from this page, against whichever build is live right now. */
 .rob { margin-top: 1.5rem; padding: clamp(1rem, 3vw, 1.5rem); background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
@@ -341,21 +337,18 @@ a { color: var(--focus); }
   .swap-cards[data-loading=on] { min-height: 25.4rem; }
   .swap-cards .card { display: contents; }
   .swap-cards .card-head { grid-row: 1; min-width: 0; padding: 0.7rem 0.8rem 0.55rem; background: var(--c-bg) var(--c-img); color: var(--c-fg); border: 1px solid var(--c-edge); border-radius: 16px; transition: background-color 0.35s, border-color 0.35s, color 0.35s; }
-  .swap-cards .card[data-preview=on] .card-head { border-style: dashed; border-width: 2px; }
   #swap-trust .card-head { grid-column: 1; }
   #swap-pf .card-head { grid-column: 2; }
   .swap-cards .card h2 { font-size: 0.95rem; }
   .swap-cards .card-top { gap: 0.2rem 0.4rem; }
-  .swap-cards .preview-pill { padding: 0 0.45rem; font-size: 0.68rem; }
   .swap-cards .addr { flex: 1 1 100%; margin: 0; padding: 0; border: 0; font-size: 0.62rem; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .swap-cards .card-sub, .swap-cards .card-head .rules, .swap-cards .more, #swap-trust .noread, #swap-trust .tech { display: none; }
   .swap-cards .word { margin-top: 0.25rem; font-size: 2.4rem; }
   .swap-cards .card-body { grid-column: 1 / -1; min-width: 0; flex: none; padding-left: 0.75rem; border-left: 4px solid var(--c-edge); color: var(--ink); --c-sub: var(--muted); }
   .swap-cards .card-body::before { content: attr(data-label); font-size: 0.82rem; font-weight: 800; }
   .swap-cards .card-line { min-height: 0; margin-top: 0.1rem; font-size: 0.95rem; line-height: 1.35; }
-  .swap-cards .card[data-preview=on] .card-line { min-height: 4.05em; } /* the BLOCK stage's three lines, held while the loop plays */
   .swap-cards .looked { padding-top: 0.2rem; margin-top: 0; font-size: 0.82rem; }
-  .swap-cards .preview-note { margin-top: 0.3rem; font-size: 0.82rem; }
+  .swap-cards .swap-note { margin-top: 0.3rem; font-size: 0.82rem; }
   .swap-cards .hashline { padding-top: 0.4rem; }
   .before { margin-top: 0.4rem; padding-top: 0.4rem; }
   .before-title { font-size: 0.95rem; }
@@ -401,8 +394,9 @@ a { color: var(--focus); }
   .agent-steps > #agent-row-check { break-before: column; }
 }
 .astep { margin: 0; display: flex; flex-direction: column; gap: 0.35rem; max-width: 100%; }
-.astep[data-state=off] { visibility: hidden; opacity: 0; }
-.astep[data-state=on] { visibility: visible; opacity: 1; }
+/* A row that has not played yet is its own faint self, so the story never has a blank half or a gap, and nothing moves when it lights up. */
+.astep[data-state=off] { opacity: 0.3; }
+.astep[data-state=on] { opacity: 1; }
 .astep h3 { margin: 0; font: 650 0.85rem/1.3 var(--sans); color: var(--muted); }
 .astep p { margin: 0; overflow-wrap: anywhere; }
 .astep code { overflow-wrap: anywhere; }
@@ -424,6 +418,7 @@ a { color: var(--focus); }
 /* The two beats: today's ALLOWED is small and quiet, the refusal after the owner's swap is the big red verdict. Each says Live or Recorded. */
 .beat { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; }
 .beat-when { font-weight: 650; }
+.src:empty { display: none; }
 .src { padding: 0.05rem 0.55rem; border: 1px solid currentColor; border-radius: 99px; font-size: 0.75rem; font-weight: 650; opacity: 0.85; white-space: nowrap; }
 .src[data-source=live]::before { content: ""; display: inline-block; width: 0.45rem; height: 0.45rem; margin-right: 0.35rem; border-radius: 50%; background: currentColor; }
 .agent-out { margin-top: 0.4rem; }
@@ -483,9 +478,17 @@ a { color: var(--focus); }
   .survey-table th, .survey-table td { padding-right: 0.4rem; }
   .survey-table .hash { max-width: 8ch; font-size: 0.8rem; }
 }
-/* Narrower than a small phone the fingerprint column goes: a name and a key count are what the table is for. */
+/* On a small phone the fingerprint column stays, shorter, and the key count's heading wraps. */
 @media (max-width: 26.25rem) {
-  .survey-table :is(th:nth-child(2), td:nth-child(2)) { display: none; }
+  .survey { padding-inline: 0.6rem; }
+  .survey-table { font-size: 0.8rem; }
+  .survey-table .hash { max-width: 8ch; padding-inline: 0.3em; font-size: 0.72rem; }
+  .survey-table thead th:last-child { width: 4.5rem; }
+}
+@media (max-width: 21.25rem) {
+  .survey-table { font-size: 0.72rem; }
+  .survey-table .hash { max-width: 5ch; }
+  .survey-table thead th:last-child { width: 3.2rem; }
 }
 
 /* The scanner */

@@ -65,10 +65,10 @@
     <p class="swap-detail" id="swap-detail"></p>
 
     <div class="swap-pin" id="swap-pin" hidden>
-      <p class="pin-line"><b>The code changed since you arrived.</b> No auditor needed to see that: the fingerprint is different.<span class="pin-inline"> Fingerprint then <button type="button" class="hash" id="pin-then" data-copy aria-label="Copy the full code fingerprint (hash) you arrived to"></button>, now <button type="button" class="hash" id="pin-now" data-copy aria-label="Copy the full code fingerprint (hash) live now"></button>.</span></p>
+      <p class="pin-line"><b>The code changed since you arrived.</b> No auditor needed to see that: the fingerprint is different.<span class="pin-inline" id="pin-inline"></span></p>
       <details class="fold pin-fold">
         <summary>Why no key list can tell you this</summary>
-        <p class="pin-fp">Fingerprint then <button type="button" class="hash" id="pin-fold-then" data-copy aria-label="Copy the full code fingerprint (hash) you arrived to"></button>, now <button type="button" class="hash" id="pin-fold-now" data-copy aria-label="Copy the full code fingerprint (hash) live now"></button>.</p>
+        <p class="pin-fp" id="pin-fp"></p>
         <p id="pin-keys"></p>
       </details>
     </div>
@@ -81,7 +81,7 @@
               <h2>An <span class="more">address </span>allowlist</h2>
               <code class="addr" data-address></code>
             </div>
-            <p class="card-sub">What a scoped agent key already checks</p>
+            <p class="card-sub">What agent wallets check today: the name, not the code</p>
             <p class="word"><span id="trust-word"></span></p>
           </div>
           <div class="card-body" data-label="Address allowlist">
@@ -98,7 +98,6 @@
           <div class="card-head">
             <div class="card-top">
               <h2>Preflight</h2>
-              <span class="preview-pill" id="pf-preview-pill" hidden>Preview</span>
               <code class="addr" data-address></code>
             </div>
             <p class="card-sub">Looks at the code that is live right now</p>
@@ -106,7 +105,7 @@
           </div>
           <div class="card-body" data-label="Preflight">
             <p class="card-line" id="pf-line"></p>
-            <p class="preview-note" id="pf-preview" hidden></p>
+            <p class="swap-note" id="pf-note" hidden></p>
             <div class="before" id="swap-before" hidden>
               <p class="before-title" id="before-title"></p>
               <p class="before-said">Preflight said <b class="vw" id="before-word"></b> <span class="rules" id="before-rules"></span> for it. <span id="before-reason"></span></p>
@@ -123,6 +122,7 @@
       </div>
     </div>
 
+    <p class="swap-also">The guard can also flag any contract whose code changed since your agent approved it, with no auditor needed. It is a setting you turn on. <a href="https://github.com/WonkaRed/preflight/tree/main/guard">How to turn it on</a></p>
     <p class="swap-print" id="swap-keys"></p>
     <details class="fold keys-fold">
       <summary>Why zero keys never meant fixed code</summary>
@@ -230,7 +230,7 @@
         <h3>Remembers the verdict</h3>
         <p class="tag">Registry on NEAR</p>
         <p>Keeps a verdict for each version of the code. Change the code and it is a new version with no verdict yet. Today that covers only the demo contracts on this page; every other contract gets a warn until someone audits it.</p>
-        <p class="step-tech">Stored under the SHA-256 of the deployed wasm, so a different hash is a different verdict.</p>
+        <p class="step-tech">Stored under the SHA-256 of the deployed wasm, so a different hash is a different verdict. On chain now: <a href="https://testnet.near.rocks/account/registry.preflight-guard.testnet">the registry account</a> and <a href="https://testnet.near.rocks/tx/23cVbw7tiCyDt8wpRCRBPip5jT8xsfnP1NbLTeoWD197">the transaction that published the vulnerable build's Unsafe verdict</a>.</p>
         <a href="https://github.com/WonkaRed/preflight/tree/main/registry">See the contract</a>
       </li>
       <li class="step">

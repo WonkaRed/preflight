@@ -8,7 +8,6 @@ import { clean, h, plural } from './report.js';
 import { createRob } from './rob.js';
 import { createSwap, isAccountId, parseRecorded } from './swap.js';
 import { agentScript, mountAgent, RULE_WORDS } from './swap-agent.js';
-import { createPreview } from './swap-preview.js';
 import { SWAP_CONFIG } from './swap-config.js';
 
 // What each BLOCK says first, in words anyone can read, and the exact technical sentence behind it (shown in the card's fold-out).
@@ -20,7 +19,7 @@ const BUG_PLAIN = {
 const BUG_LINE = {
   PF001: 'Any account can call the contract\'s callback directly, so anyone can credit themselves a balance without paying and withdraw what others deposited.',
 };
-// The line beside the swap button, after the live status. Live, it follows what the visitor is looking at: the fixed code they arrived to (the button and the preview say it all),
+// The line beside the swap button, after the live status. Live, it follows what the visitor is looking at: the fixed code they arrived to (the button and the note under the verdict say it all),
 // the bad code they swapped in, the bad code someone else left behind (the contract is shared), and the fixed code after a swap.
 const HINT = {
   loading: '',
@@ -32,6 +31,9 @@ const HINT = {
   badLeft: 'Someone left this contract on its bad code, so Preflight says BLOCK while the address check still says ALLOW. Swap in the fixed code, then swap the bad one back, to watch it change.',
   other: 'Press it. The code behind this address changes, live.',
 };
+
+// Under the Preflight card's verdict while it says ALLOW: what pressing the button does. Worded as a condition, never as a live result.
+const SWAP_NOTE = 'If the owner swaps in the bad code, this card turns to BLOCK and the allowlist keeps saying ALLOW.';
 
 // How long ago, in the words a visitor would use. Whole units, rounded down; under a minute is "a moment".
 const since = (ms) => {
@@ -63,11 +65,6 @@ const STATUS = {
     : 'No live contract is set up in this copy of the page, and no recording is bundled.'),
 };
 
-/** What the hero's preview needs: the vulnerable build as the chain's status() and the registry show it right now (never a recording), or null when it is not a BLOCK or could not be read. */
-function previewOf(state) {
-  const bad = state.other;
-  return bad?.build === 'vulnerable' && bad.verdict.decision === 'BLOCK' ? { hash: state.codeHash, bad: pfOf(bad, bad.verdict) } : null;
-}
 const NO_PF = { tone: 'none', word: '', rules: '', ruleWords: '', line: '', tech: '', tag: { text: '', state: 'none' }, build: '', hash: '' };
 /** The Preflight card for a code (`shown`: its build and hash) and the registry verdict for it. */
 function pfOf(shown, verdict) {
@@ -121,6 +118,9 @@ export function viewModel(state, { now, explorerUrl }) {
     tx: txLink(prior.txHash, 'The swap transaction'),
   };
 
+  // What a swap would do, said only while the fixed code is live and the registry (read just now) calls the other build unsafe.
+  const bad = state.other?.build === 'vulnerable' && state.other.verdict.decision === 'BLOCK';
+
   const swapping = state.tx !== null && ['pending', 'landing'].includes(state.tx.stage);
   const waitMs = state.waitUntil === null ? 0 : state.waitUntil - now;
   const resting = mode !== 'recorded' && !swapping && waitMs > 0;
@@ -159,9 +159,8 @@ export function viewModel(state, { now, explorerUrl }) {
     pin,
     agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, other: state.other, recorded: state.recorded }),
     loading: mode === 'loading',
-    keys: `No admin keys, and its code still ${mode === 'live' && state.flips !== null ? `changed ${plural(state.flips, 'time')}` : 'changes'}.`,
-    previewNote: '',
-    preview: mode === 'live' && state.build === 'patched' && verdict?.decision === 'ALLOW' ? previewOf(state) : null,
+    keys: `Zero full-access keys, and its code still ${mode === 'live' && state.flips !== null ? `changed ${plural(state.flips, 'time')}` : 'changes'}: anyone can press the swap button, by design.`,
+    swapNote: mode === 'live' && state.build === 'patched' && verdict?.decision === 'ALLOW' && bad ? SWAP_NOTE : '',
     hint: resting && !change ? HINT.resting : mode === 'live' ? liveHint : HINT[mode] ?? '',
     button,
     tx,
@@ -169,23 +168,19 @@ export function viewModel(state, { now, explorerUrl }) {
   };
 }
 
-const PREVIEW_NOTE = {
-  safe: 'Preview. Today both checks say yes.',
-  swap: 'Preview. The owner swaps the code: the fingerprint changes.',
-  bad: 'Preview. Preflight now says BLOCK. The allowlist still says ALLOW.',
-  still: 'Preview. If the owner swaps the code, Preflight turns to BLOCK and the allowlist keeps saying ALLOW. Press the button to try it for real.',
-};
-/** The model with the preview's stage on the Preflight card (from `createPreview`), or as it is when none is showing. Always labelled. */
-export function withPreview(model, stage) {
-  const { preview } = model;
-  if (!stage || !preview) return model;
-  const pf = stage === 'bad' ? preview.bad : stage === 'swap' ? { ...model.pf, hash: preview.bad.hash } : model.pf;
-  return { ...model, pf, previewNote: PREVIEW_NOTE[stage] };
+const written = new WeakMap(); // the fingerprints each sentence shows now, so an unchanged pair is not rebuilt under the visitor's pointer
+/** "Fingerprint then X, now Y." into `el`, or nothing at all when there is no change (`pin` null): the sentence never exists with an empty slot. */
+function writeFingerprints(doc, el, lead, pin) {
+  const key = pin && `${pin.then}|${pin.now}`;
+  if (written.get(el) === key) return;
+  written.set(el, key);
+  const hash = (value, which) => h(doc, 'button', { type: 'button', class: 'hash', 'data-copy': true, title: value, 'aria-label': `Copy the full code fingerprint (hash) ${which}` }, value);
+  el.replaceChildren(...(pin ? [lead, hash(pin.then, 'you arrived to'), ', now ', hash(pin.now, 'live now'), '.'].map((part) => (typeof part === 'string' ? doc.createTextNode(part) : part)) : []));
 }
 
 /** Writes a view model into the section's elements (`els`, by name). `animate`: nudge the verdict when it changes. */
 export function paint(doc, els, model, { animate = false } = {}) {
-  const changed = els.pfWord.textContent !== model.pf.word || els.pfHash.textContent !== model.pf.hash;
+  const changed = els.pfWord.textContent !== '' && (els.pfWord.textContent !== model.pf.word || els.pfHash.textContent !== model.pf.hash);
   els.status.textContent = model.status.text;
   els.status.setAttribute('data-tone', model.status.tone);
   els.detail.textContent = model.detail;
@@ -205,9 +200,8 @@ export function paint(doc, els, model, { animate = false } = {}) {
   els.pfTag.textContent = model.pf.tag.text;
   els.pfTag.setAttribute('data-state', model.pf.tag.state);
   els.pfTag.hidden = model.pf.tag.text === '';
-  els.pfPreview.textContent = model.previewNote;
-  els.pfPreview.hidden = els.pfPreviewPill.hidden = model.previewNote === '';
-  els.pfCard.setAttribute('data-preview', model.previewNote === '' ? 'off' : 'on');
+  els.pfNote.textContent = model.swapNote;
+  els.pfNote.hidden = model.swapNote === '';
   els.keys.textContent = model.keys;
   els.pfBuild.textContent = model.pf.build;
   els.pfHash.textContent = model.pf.hash;
@@ -224,13 +218,9 @@ export function paint(doc, els, model, { animate = false } = {}) {
     els.beforeTx.replaceChildren(...(model.before.tx ? [h(doc, 'a', { href: model.before.tx.href, target: '_blank', rel: 'noopener noreferrer' }, model.before.tx.text)] : []));
   }
   els.pin.hidden = model.pin === null;
-  if (model.pin) {
-    for (const [name, hash] of [['pinThen', model.pin.then], ['pinNow', model.pin.now], ['pinFoldThen', model.pin.then], ['pinFoldNow', model.pin.now]]) {
-      els[name].textContent = hash;
-      els[name].setAttribute('title', hash);
-    }
-    els.pinKeys.textContent = model.pin.keys;
-  }
+  writeFingerprints(doc, els.pinInline, ' Fingerprint then ', model.pin);
+  writeFingerprints(doc, els.pinFp, 'Fingerprint then ', model.pin);
+  els.pinKeys.textContent = model.pin?.keys ?? '';
   els.button.textContent = model.button.label;
   els.button.disabled = model.button.disabled;
   els.hint.textContent = model.hint;
@@ -321,9 +311,9 @@ export function paintRob(doc, els, model, { animate = false } = {}) {
 
 export const IDS = {
   status: 'swap-status', detail: 'swap-detail', source: 'swap-source', cards: 'swap-cards', keys: 'swap-keys', trustWord: 'trust-word', trustNote: 'trust-note',
-  pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfTech: 'pf-tech', pfBuild: 'pf-build', pfHash: 'pf-hash', pfTag: 'pf-tag', pfPreview: 'pf-preview', pfPreviewPill: 'pf-preview-pill',
+  pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfTech: 'pf-tech', pfBuild: 'pf-build', pfHash: 'pf-hash', pfTag: 'pf-tag', pfNote: 'pf-note',
   before: 'swap-before', beforeTitle: 'before-title', beforeWord: 'before-word', beforeRules: 'before-rules', beforeReason: 'before-reason', beforeHash: 'before-hash', beforeTx: 'before-tx',
-  pin: 'swap-pin', pinThen: 'pin-then', pinNow: 'pin-now', pinFoldThen: 'pin-fold-then', pinFoldNow: 'pin-fold-now', pinKeys: 'pin-keys',
+  pin: 'swap-pin', pinInline: 'pin-inline', pinFp: 'pin-fp', pinKeys: 'pin-keys',
   button: 'swap-button', hint: 'swap-hint', flips: 'swap-flips', tx: 'swap-tx',
 };
 
@@ -350,21 +340,12 @@ export async function mountSwap(doc = document, config = SWAP_CONFIG) {
   let shown = '';
   let pfTone = 'none';
   let model = null;
-  let previewShown = false;
-  // The preview paints over the live model on the Preflight card only; the allowlist card, the button and the agent never see it.
-  const paintHero = () => {
-    const stage = preview.stage();
-    paint(doc, els, withPreview(model, stage), { animate: !calm && (stage === null ? !previewShown : stage === 'bad') });
-    previewShown = stage !== null;
-  };
-  const preview = createPreview({ calm, onChange: () => { if (model) paintHero(); } });
   // "Rob it" paints on its own clicks too (signing and sending take a moment); it never polls the chain by itself.
   const renderRob = () => paintRob(doc, robEls, robViewModel(rob.getState(), pfTone, config.explorerUrl), { animate: !calm });
   const render = () => {
     const state = swap.getState();
     model = viewModel(state, { now: Date.now(), explorerUrl: config.explorerUrl });
-    preview.sync(model.preview && { hash: model.preview.hash });
-    paintHero();
+    paint(doc, els, model, { animate: !calm });
     agent.update(model.agent);
     pfTone = model.pf.tone;
     rob.sync(state.mode === 'live', state.mode === 'live' ? state.codeHash : null);
@@ -377,8 +358,8 @@ export async function mountSwap(doc = document, config = SWAP_CONFIG) {
   swap = createSwap({ config, recorded, onChange: render });
   rob = createRob({ config, onChange: renderRob });
   render();
-  els.button.addEventListener('click', () => { preview.press(); watching = true; Promise.resolve(swap.flip()).finally(() => { watching = false; }); });
-  robEls.robButton.addEventListener('click', () => { preview.press(); rob.rob(); });
+  els.button.addEventListener('click', () => { watching = true; Promise.resolve(swap.flip()).finally(() => { watching = false; }); });
+  robEls.robButton.addEventListener('click', () => rob.rob());
   // The countdown on the button needs a repaint each second; nothing else changes between polls.
   setInterval(() => { if (swap.getState().waitUntil !== null) render(); }, 500);
   doc.addEventListener('visibilitychange', () => { if (!doc.hidden) swap.wake(); });

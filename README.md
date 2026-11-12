@@ -6,7 +6,7 @@ AI agents sign calls to contracts by address; the code behind an address can cha
 
 ![The Swap: the normal safety check keeps saying ALLOW while Preflight goes from ALLOW to BLOCK when the code is swapped.](docs/media/swap.gif)
 
-*One NEAR testnet address, two checks. The normal safety check (an address allowlist, the real baseline agent wallets and NEAR function-call keys already give you) says ALLOW before and after the swap. Preflight looks the verdict up under the hash of the code deployed right now, so here it goes from ALLOW to BLOCK (PF001) with the code. The swap is a real testnet transaction.*
+*One NEAR testnet address, two checks. The normal safety check (an address allowlist, the real baseline agent wallets and NEAR function-call keys already give you) says ALLOW before and after the swap. Preflight looks the verdict up under the hash of the code deployed right now, so here it goes from ALLOW to BLOCK (PF001) with the code. On the live page the swap is a real testnet transaction; this recording simulates that one transaction and reads everything else from the chain.*
 
 **TL;DR**
 

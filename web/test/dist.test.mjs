@@ -120,7 +120,7 @@ test('the agent panel says plainly that it is scripted, sends nothing, and links
   assert.match(html, /id="swap-title"><span>The address never changes\.<\/span> <span>The code does\.<\/span><\/h1>\s*<p class="swap-lede">AI agents pay smart contracts by their address\. The owner can often swap the code behind that address\. Preflight checks the code, not the address\./);
   assert.match(html, /This scripted agent is shown holding a key that can spend\. My testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same\./);
   // The first screen is plain words; the technical wording stays reachable.
-  assert.match(html, /<h2>An <span class="more">address <\/span>allowlist<\/h2>[\s\S]*?<p class="card-sub">What a scoped agent key already checks<\/p>/);
+  assert.match(html, /<h2>An <span class="more">address <\/span>allowlist<\/h2>[\s\S]*?<p class="card-sub">What agent wallets check today: the name, not the code<\/p>/);
   assert.match(html, /<p class="card-sub">Looks at the code that is live right now<\/p>/);
   assert.match(html, /<span[^>]*>Code fingerprint<\/span><button type="button" class="hash" id="pf-hash"/);
   assert.match(html, /The left card is a real baseline, not a strawman: an address allowlist is what agent wallets and NEAR function-call keys scoped to one contract already give you\. It is not a model of any particular wallet or agent\./);
@@ -166,4 +166,17 @@ test('no page text uses an em or en dash or a curly quote', () => {
 test('the agent rows ship showing, so the story reads without script; mountAgent is what puts them to wait', () => {
   assert.doesNotMatch(html, /data-state=/);
   assert.match(read(SRC, 'swap-agent.js'), /if \(!calm\) rows\.forEach\(\(_, i\) => setRow\(i, false\)\)/);
+});
+
+test('a retired build\'s hash is nowhere in the page: not in the markup, the scripts, the recording or the data', () => {
+  const RETIRED = /CNtPsVA7|Gg8KdwiN|HE6QGy21|BzFFte9L/; // the first and second pairs' hashes; the chain no longer runs them
+  for (const name of readdirSync(DIST).filter((n) => /\.(html|js|css|json)$/.test(n))) assert.doesNotMatch(read(DIST, name), RETIRED, name);
+});
+
+test('the explorer links in "Remembers the verdict" and the line about the guard\'s pin check', () => {
+  const card = html.slice(html.indexOf('<h3>Remembers the verdict</h3>'), html.indexOf('<h3>Stops the bad payment</h3>'));
+  assert.match(card, new RegExp(`href="${SWAP_CONFIG.explorerUrl}/account/${SWAP_CONFIG.registryId.replaceAll('.', '\\.')}"`), 'the registry account');
+  const tx = card.match(new RegExp(`href="${SWAP_CONFIG.explorerUrl}/tx/([1-9A-HJ-NP-Za-km-z]{43,44})"`));
+  assert.ok(tx, 'a real transaction that published a verdict');
+  assert.match(html, /<p class="swap-also">The guard can also flag any contract whose code changed since your agent approved it, with no auditor needed\. It is a setting you turn on\./);
 });

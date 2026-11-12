@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createSwap, parseRecorded } from '../src/swap.js';
-import { IDS as PAGE_IDS, mountSwap, paint, paintRob, ROB_IDS, robViewModel, viewModel, withPreview } from '../src/swap-view.js';
+import { IDS as PAGE_IDS, mountSwap, paint, paintRob, ROB_IDS, robViewModel, viewModel } from '../src/swap-view.js';
 import { fakeDocument, walk } from './fake-dom.mjs';
 import { CONFIG, fakeChain, flipTxResult, HASH, recordedJson, UNSET_CONFIG } from './swap-chain.mjs';
 
@@ -128,7 +128,7 @@ test('empty and loading: no verdict word is invented, and the button is off', ()
 
 // ---- paint ---------------------------------------------------------------------------------------------------------
 
-const IDS = ['status', 'detail', 'source', 'cards', 'keys', 'pfTag', 'pfPreview', 'pfPreviewPill', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfTech', 'pfBuild', 'pfHash', 'before', 'beforeTitle', 'beforeWord', 'beforeRules', 'beforeReason', 'beforeHash', 'beforeTx', 'pin', 'pinThen', 'pinNow', 'pinFoldThen', 'pinFoldNow', 'pinKeys', 'button', 'hint', 'flips', 'tx'];
+const IDS = ['status', 'detail', 'source', 'cards', 'keys', 'pfTag', 'pfNote', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfTech', 'pfBuild', 'pfHash', 'before', 'beforeTitle', 'beforeWord', 'beforeRules', 'beforeReason', 'beforeHash', 'beforeTx', 'pin', 'pinInline', 'pinFp', 'pinKeys', 'button', 'hint', 'flips', 'tx'];
 function fakeSection() {
   const doc = fakeDocument();
   const els = Object.fromEntries(IDS.map((name) => [name, Object.assign(doc.createElement('div'), { textContent: '' })]));
@@ -169,11 +169,11 @@ test('paint animates the card only when the verdict or hash changed, and only wh
   const p = (await liveState('patched')).state;
   paint(doc, els, view(v), { animate: true });
   paint(doc, els, view(v), { animate: true });
-  assert.equal(calls.length, 1, 'only the first paint changed anything');
+  assert.equal(calls.length, 0, 'the first verdict on the page is not an event: it is simply there');
   paint(doc, els, view(p), { animate: true });
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   paint(doc, els, view(v), { animate: false });
-  assert.equal(calls.length, 2, 'reduced motion: no animation');
+  assert.equal(calls.length, 1, 'reduced motion: no animation');
 });
 
 // The page's own wiring, with the globals a browser provides: a tab nobody sees does not read the chain, and showing it does.
@@ -232,11 +232,12 @@ test('both builds read correctly on their own: the rule id comes with its plain 
   els.pfHash.animate = () => animated.push('hash');
   paint(doc, els, vulnerable, { animate: true });
   assert.deepEqual([els.pfHash.textContent, els.pfHash.attrs.title, els.pfRules.attrs.title], [HASH.vulnerable, HASH.vulnerable, 'anyone can credit themselves a balance'], 'the text stays whole; the page shortens it');
-  assert.deepEqual(animated, ['card', 'hash']);
+  assert.deepEqual(animated, [], 'the first verdict is not an event');
   paint(doc, els, patched, { animate: true });
   assert.deepEqual([els.pfCard.attrs['data-tone'], els.pfHash.attrs.title, els.pfRules.attrs.title], ['allow', HASH.patched, ''], 'the other build, painted over the first');
+  assert.deepEqual(animated, ['card', 'hash'], 'a swap turns the card over');
   paint(doc, els, patched, { animate: true });
-  assert.equal(animated.length, 4, 'a read that changed nothing animates nothing');
+  assert.equal(animated.length, 2, 'a read that changed nothing animates nothing');
 });
 
 // ---- the contrast: the build that ran here before the last swap ----------------------------------------------------------
@@ -369,46 +370,37 @@ test('the safe verdict shows a green "PF001 check: clear" chip; a found rule sho
   assert.deepEqual([els.pfTag.textContent, els.pfTag.attrs['data-state'], els.pfTag.hidden], ['PF001 check: clear', 'clear', false]);
 });
 
-test('one line says there are no admin keys and how many times the code changed, from the live count', async () => {
-  assert.equal(view((await liveState('patched')).state).keys, 'No admin keys, and its code still changed 3 times.');
-  assert.equal(view({ ...(await liveState('patched')).state, flips: 1 }).keys, 'No admin keys, and its code still changed 1 time.');
-  assert.equal(view({ ...(await liveState('patched')).state, flips: null }).keys, 'No admin keys, and its code still changes.');
-  assert.equal(view({ ...createSwap({ config: CONFIG, recorded }).getState(), mode: 'recorded', reason: 'rpc-down' }).keys, 'No admin keys, and its code still changes.', 'a recording claims no live count');
+test('one line says there are zero full-access keys, how many times the code changed (the live count), and that anyone can press the button', async () => {
+  const line = (n) => `Zero full-access keys, and its code still ${n}: anyone can press the swap button, by design.`;
+  assert.equal(view((await liveState('patched')).state).keys, line('changed 3 times'));
+  assert.equal(view({ ...(await liveState('patched')).state, flips: 1 }).keys, line('changed 1 time'));
+  assert.equal(view({ ...(await liveState('patched')).state, flips: null }).keys, line('changes'));
+  assert.equal(view({ ...createSwap({ config: CONFIG, recorded }).getState(), mode: 'recorded', reason: 'rpc-down' }).keys, line('changes'), 'a recording claims no live count');
 });
 
-test('the preview is offered only on the fixed code, and its bad build is the live status() hash with its live registry verdict, never the recording', async () => {
-  const safe = view((await liveState('patched')).state);
-  assert.equal(safe.preview.hash, HASH.patched);
-  assert.deepEqual([safe.preview.bad.word, safe.preview.bad.tone, safe.preview.bad.hash, safe.preview.bad.rules, safe.preview.bad.build], ['BLOCK', 'block', HASH.vulnerable, 'PF001', 'Vulnerable build']);
-  const recordedBad = recorded.steps.find((step) => step.decision === 'BLOCK').codeHash;
-  assert.notEqual(recordedBad, HASH.vulnerable, 'the recording is of other code than the chain holds, as after a redeploy');
-  assert.equal(safe.preview.bad.hash, (await liveState('patched')).state.other.codeHash, 'the hash comes from the chain read');
-  assert.equal(safe.previewNote, '', 'the live model alone is never labelled a preview');
-  assert.equal(view((await liveState('vulnerable')).state).preview, null);
+test('at rest the hero holds the verdict of the live code whatever the time; the note about a swap is a condition, shown only when the chain says the other build is unsafe', async () => {
   const state = (await liveState('patched')).state;
-  assert.equal(view({ ...state, recorded: null }).preview.bad.hash, HASH.vulnerable, 'the recording is not needed for it');
-  assert.equal(view({ ...state, other: null }).preview, null, 'the other build unread: no preview, and the recording does not fill in');
+  const safe = view(state, 0);
+  assert.deepEqual(view(state, 4000).pf, safe.pf, 'nothing in the verdict moves with time');
+  assert.deepEqual([safe.pf.word, safe.pf.hash, safe.trust.word], ['ALLOW', HASH.patched, 'ALLOW']);
+  assert.match(safe.swapNote, /^If the owner swaps in the bad code, this card turns to BLOCK/);
+  assert.equal(view((await liveState('vulnerable')).state).swapNote, '', 'the bad code is live: nothing to predict');
+  assert.equal(view({ ...state, other: null }).swapNote, '', 'the other build unread: no claim, and the recording does not fill in');
   const unaudited = (await liveState('patched', (chain) => { delete chain.verdicts[HASH.vulnerable]; })).state;
-  assert.equal(view(unaudited).preview, null, 'a build the registry does not call unsafe is not shown as BLOCK');
-  assert.equal(view({ ...state, mode: 'recorded', reason: 'rpc-down' }).preview, null);
-  const stages = Object.fromEntries(['safe', 'swap', 'bad', 'still'].map((stage) => [stage, withPreview(safe, stage)]));
-  assert.ok(Object.values(stages).every((m) => m.previewNote.startsWith('Preview.')));
-  assert.deepEqual([stages.safe.pf.word, stages.swap.pf.word, stages.swap.pf.hash, stages.bad.pf.word, stages.still.pf.word], ['ALLOW', 'ALLOW', safe.preview.bad.hash, 'BLOCK', 'ALLOW']);
-  assert.equal(stages.bad.trust.word, 'ALLOW', 'the allowlist card never changes');
-  assert.equal(stages.bad.agent, safe.agent, 'nor does the agent');
-  assert.equal(withPreview(safe, null), safe);
+  assert.equal(view(unaudited).swapNote, '', 'a build the registry does not call unsafe is not predicted to BLOCK');
+  assert.equal(view({ ...state, mode: 'recorded', reason: 'rpc-down' }).swapNote, '');
   const { doc, els } = fakeSection();
-  paint(doc, els, stages.bad);
-  assert.deepEqual([els.pfPreview.hidden, els.pfPreviewPill.hidden, els.pfCard.attrs['data-preview'], els.pfWord.textContent], [false, false, 'on', 'BLOCK']);
   paint(doc, els, safe);
-  assert.deepEqual([els.pfPreview.hidden, els.pfPreviewPill.hidden, els.pfCard.attrs['data-preview']], [true, true, 'off']);
+  assert.deepEqual([els.pfNote.hidden, els.pfNote.textContent, els.pfWord.textContent], [false, safe.swapNote, 'ALLOW']);
+  paint(doc, els, view((await liveState('vulnerable')).state));
+  assert.deepEqual([els.pfNote.hidden, els.pfWord.textContent], [true, 'BLOCK']);
 });
 
 test('the first screen: on the fixed build it invites the owner\'s swap, and shows no history; on the bad build left by someone else it still tells the story', async () => {
   const landing = view({ ...(await fixedLive(11)).state, arrival: HASH.patched }, 0);
   assert.deepEqual([landing.trust.word, landing.pf.word, landing.before, landing.pin], ['ALLOW', 'ALLOW', null, null], 'both checks say ALLOW and nothing speaks of an earlier build');
   assert.equal(landing.button.label, 'Swap in the bad code');
-  assert.equal(landing.hint, '', 'the button, the preview and the status line say it: no second sentence to read');
+  assert.equal(landing.hint, '', 'the button, the note under the verdict and the status line say it: no second sentence to read');
   assert.equal(landing.trust.note, 'This address is on its safe list, so it says yes. Every time.');
   const swapped = view({ ...(await liveState('vulnerable')).state, arrival: HASH.patched });
   assert.match(swapped.hint, /^Same address, new code\. The address check cannot tell/);
@@ -433,17 +425,24 @@ test('paint shows the line with the fingerprints as text and the full values as 
   const { state } = await liveState('patched');
   paint(doc, els, view({ ...state, arrival: HASH.vulnerable, keys: { full: 0, codeHash: HASH.patched } }));
   assert.equal(els.pin.hidden, false);
-  assert.deepEqual([els.pinThen.textContent, els.pinNow.textContent, els.pinFoldThen.textContent, els.pinFoldNow.textContent], [HASH.vulnerable, HASH.patched, HASH.vulnerable, HASH.patched]);
-  assert.equal(els.pinNow.attrs.title, HASH.patched);
+  const sentence = (el) => { const text = []; const titles = []; walk(el, (n) => { if (n.text !== undefined) text.push(n.text); if (n.tag === 'button') titles.push(n.attrs.title); }); return [text.join(''), titles]; };
+  const full = [HASH.vulnerable, HASH.patched];
+  assert.deepEqual(sentence(els.pinInline), [` Fingerprint then ${full[0]}, now ${full[1]}.`, full], 'text for reading, the full values as titles');
+  assert.deepEqual(sentence(els.pinFp), [`Fingerprint then ${full[0]}, now ${full[1]}.`, full]);
+  const inline = els.pinInline.kids;
+  paint(doc, els, view({ ...state, arrival: HASH.vulnerable, keys: { full: 0, codeHash: HASH.patched } }));
+  assert.equal(els.pinInline.kids, inline, 'the same pair is not rebuilt under the visitor\'s pointer');
   assert.match(els.pinKeys.textContent, /no full-access key/);
   paint(doc, els, view(state));
   assert.equal(els.pin.hidden, true);
+  assert.deepEqual([els.pinInline.kids, els.pinFp.kids, els.pinKeys.textContent], [[], [], ''], 'at rest the sentences hold no words and no empty slots');
 });
 
 test('the page says it plainly: no auditor needed, the code changed since you arrived, fingerprint then and now', async () => {
   const { readFileSync } = await import('node:fs');
   const html = readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
-  assert.match(html, /<b>The code changed since you arrived\.<\/b> No auditor needed to see that: the fingerprint is different\.<span class="pin-inline"> Fingerprint then <button[^>]*id="pin-then"[^>]*><\/button>, now <button[^>]*id="pin-now"[^>]*><\/button>\.<\/span>/);
+  assert.match(html, /<b>The code changed since you arrived\.<\/b> No auditor needed to see that: the fingerprint is different\.<span class="pin-inline" id="pin-inline"><\/span><\/p>/);
+  assert.match(html, /<p class="pin-fp" id="pin-fp"><\/p>/, 'the sentence with the fingerprints is written when there are fingerprints to put in it');
   assert.match(html, /<details class="fold pin-fold">\s*<summary>Why no key list can tell you this<\/summary>/);
   assert.match(html, /<div class="swap-pin" id="swap-pin" hidden>/, 'hidden until there is a change to show');
 });
