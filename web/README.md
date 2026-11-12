@@ -1,6 +1,6 @@
 # Preflight in the browser
 
-A static page. At the top is the Swap: one NEAR testnet address whose code a button swaps between a vulnerable and a patched build, with a check that trusts the address (always ALLOW) beside Preflight, which looks the verdict up by the hash of the deployed code. A visitor arrives to the fixed build (both say ALLOW; the demo's idle timer puts it back there), swaps in the vulnerable one, and watches only Preflight turn to BLOCK, with a note that the code changed since they arrived. Below it the page unfolds as you scroll: a scripted agent obeying a poisoned page (it starts playing when it comes into view), how the three parts work, then the scanner, which runs where the visitor is: paste Rust contract source, pick a bundled vulnerable example
+A static page. At the top is the Swap: one NEAR testnet address whose code a button swaps between a vulnerable and a patched build, with a check that trusts the address (always ALLOW) beside Preflight, which looks the verdict up by the hash of the deployed code. A visitor arrives to the fixed build (both say ALLOW; the demo's idle timer puts it back there), swaps in the vulnerable one, and watches only Preflight turn to BLOCK, with a note that the code changed since they arrived. Below it the page unfolds as you scroll: a scripted agent obeying a poisoned page (it starts playing when it comes into view), how the three parts work, then a check of any NEAR account against the live chain (what the guard would say about paying it), then the scanner, which runs where the visitor is: paste Rust contract source, pick a bundled vulnerable example
 (and its patched twin), or name a public GitHub repository, and read the findings, each linked to its rule's proof (the
 fixture pair and the sandbox exploit test). No server, no account, no install. The Rust scanner is compiled to
 WebAssembly; the page is plain ES modules with no bundler.
@@ -8,7 +8,7 @@ WebAssembly; the page is plain ES modules with no bundler.
 ```
 make -C web build    # compile the scanner to wasm and assemble web/dist/
 make -C web serve    # build, then serve dist/ at http://127.0.0.1:8000/ (PORT=... to change)
-make -C web test     # build, then run the tests
+make -C web test     # install the guard's dependencies (npm; needs the network on first run; Node per guard/.npmrc engine-strict), build, then run the tests
 ```
 
 `web/dist/` is the whole site: upload it to any static host as is. It is a build output, so it is not committed, and
@@ -32,6 +32,8 @@ make -C web test     # build, then run the tests
 | `src/*.woff2`, `src/fonts-OFL.txt` | Inter Tight 800 (headlines, verdict words) and JetBrains Mono 400 and 700 (hashes, addresses, code), Latin subsets from the `@fontsource` packages under the SIL OFL, served from this origin (CSP `font-src 'self'`, `font-display: optional` with a preload, so the first paint never reflows). |
 | `src/swap-agent.js` | The Swap's agent panel: `agentScript` turns the code hash and registry verdict the Swap already read into the panel's two beats (today the fixed code is allowed, then the owner swaps the code and the guard refuses; live, each beat is read from the chain, the other build's verdict included, and labelled Live read; only the recording replay says Recorded, and a live page never takes a hash from the recording) and the guard's decision-log line (built by `guardEntry` in `swap.js`, the shape of `guard/src/log.ts`), and `mountAgent` plays it. No model runs, nothing is signed or sent. |
 | `src/code-pin.js` | The auditor-free check in the browser: the code fingerprint this visitor first saw (session storage, else memory), `changedSince`, and `countFullAccessKeys`. It mirrors the rules of `guard/src/mutability.ts` and imports none of the guard. |
+| `src/account-check.js` | "Check a contract you know", the logic: reads `view_account`, `view_access_key_list` and the registry's `get_verdict` for any NEAR account (mainnet or testnet) through the Swap's failover transport, and returns the guard's decision with the guard's own rule (`guard/src/check.ts` `inspectContract`, then `guardedCall` in `guard/src/guarded.ts`). `test/account-check-guard.test.mjs` runs the real guard on a fake chain beside it and fails on any drift. Chain answers are untrusted; an unreadable one is a failure, never a verdict. |
+| `src/account-check-view.js` | The section's wording (`viewModel`, one plain sentence per state: invalid name, no such account, no contract, global contract, could not read, loading), `paint` (text nodes only) and `mountAccountCheck` (the form, the example chips; the newest check wins). |
 | `src/survey.js`, `mainnet-survey.json` (in `dist/`) | The "On mainnet today" block. `tools/site-data.mjs` reads the rows, date and header sentence from `../docs/mainnet-survey.md` at build time and stops the build when that page changes shape. |
 | `src/swap-config.js` | The one place the Swap is configured; see below. |
 | `swap-recorded.json` (in `dist/`) | A copy of `../demo/swap/recorded.json`, written by `tools/build.mjs` (the JSON `null` when the file is absent). |
@@ -40,7 +42,7 @@ make -C web test     # build, then run the tests
 | `src/config.js` | `REPO_TREE_URL`: where the proof links point (this repository's `main` tree on GitHub). A fork sets its own; left empty, the paths show as plain text. |
 | `tools/site-data.mjs` | Reads `fixtures/` and `exploits/` (and the mainnet survey) at build time: the bundled examples and each rule's proof paths. Add a rule with its fixtures and exploit test and its links appear with no change here. |
 | `tools/build.mjs` | Assembles `dist/`. |
-| `test/` | Node's test runner against the real built wasm (`scanner`), the renderer (`report`), the Swap's serializer (`near`), controller (`swap`, against a fake NEAR node in `swap-chain.mjs`) and view (`swap-view`), the GitHub reader with a fake `fetch` (`github`), the scan worker's client (`scan-client`), the page's scan lifecycle (`session`) and the built folder (`dist`). |
+| `test/` | Node's test runner against the real built wasm (`scanner`), the renderer (`report`), the Swap's serializer (`near`), controller (`swap`, against a fake NEAR node in `swap-chain.mjs`) and view (`swap-view`), the account check's logic (`account-check`), its view (`account-check-view`) and its pin to the real guard on the guard's fake chain (`account-check-guard`), the GitHub reader with a fake `fetch` (`github`), the scan worker's client (`scan-client`), the page's scan lifecycle (`session`) and the built folder (`dist`). |
 
 The tests check the wasm output against the native command line, byte for byte, for both variants of every fixture and for a
 tree of several crates (`test/data/crates`: a build script, a nested workspace root, a loose file).
@@ -77,7 +79,7 @@ raw.githubusercontent.com, whose limits GitHub does not publish), so about 30 sc
 
 Everything a scan returns, and everything GitHub sends, is untrusted. The code has no `innerHTML`, and the page's
 Content-Security-Policy allows scripts and styles from the page's own folder only and network requests to the page's
-folder, `api.github.com`, `raw.githubusercontent.com` and the Swap's RPC endpoints, `test.rpc.fastnear.com` and `near-testnet.drpc.org`. No fonts, scripts or images come from anywhere else. The policy is a
+folder, `api.github.com`, `raw.githubusercontent.com`, the Swap's RPC endpoints (`test.rpc.fastnear.com`, `near-testnet.drpc.org`) and the account check's mainnet ones (`free.rpc.fastnear.com`, `near-mainnet.drpc.org`). No fonts, scripts or images come from anywhere else. The policy is a
 `<meta>` tag, which a worker script does not inherit: a host that can set response headers should send the same policy as a
 `Content-Security-Policy` header too (the worker is loaded from the page's own folder and makes no requests).
 

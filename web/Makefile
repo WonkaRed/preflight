@@ -14,8 +14,12 @@ build:
 
 dist: build
 
-test: build
-	node --test "test/*.test.mjs"
+# The account check's test runs the guard itself (../guard), so the guard's dependencies must be installed.
+../guard/node_modules/.package-lock.json: ../guard/package.json ../guard/package-lock.json
+	$(MAKE) -C ../guard node_modules/.package-lock.json
+
+test: build ../guard/node_modules/.package-lock.json
+	node --disable-warning=ExperimentalWarning --test "test/*.test.mjs"
 
 serve: build
 	@echo 'http://127.0.0.1:$(PORT)/'

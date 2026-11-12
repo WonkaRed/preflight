@@ -24,7 +24,7 @@ const COUNTDOWN_MARGIN_MS = 1000;
 const NO_CODE_HASH = '11111111111111111111111111111111';
 const ACCOUNT_ID = /^(([a-z\d]+[-_])*[a-z\d]+\.)*([a-z\d]+[-_])*[a-z\d]+$/;
 const RULE_ID = /^PF\d{3}$/;
-const DECISION = { Unsafe: 'BLOCK', Warn: 'WARN', Safe: 'ALLOW' };
+export const DECISION = { Unsafe: 'BLOCK', Warn: 'WARN', Safe: 'ALLOW' };
 export const STATUS_OF = Object.fromEntries(Object.entries(DECISION).map(([status, decision]) => [decision, status]));
 const REPORT_URL = /^https:\/\/[^\s"<>]{1,300}$/;
 const BUILDS = ['vulnerable', 'patched'];
@@ -63,7 +63,7 @@ export function readConfig(config) {
 }
 
 const GUARD_DECISIONS = ['allow', 'block', 'warn'];
-// A report link is chain or recording text: kept only when it is a plain https URL, and only ever shown as text.
+// A report link is chain or recording text: kept only when it is a plain https URL, and shown here as text only. A page that makes it a link checks the host itself (account-check-view.js `reportHref`).
 const reportUrl = (url) => (typeof url === 'string' && REPORT_URL.test(url) ? url : null);
 
 /**

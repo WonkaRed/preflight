@@ -4,7 +4,7 @@
 
 - Code nested more than about 2000 levels deep runs the in-browser build out of stack. The page says so and points to the command line.
 - Pasted source is a single file with no `Cargo.toml`, so PF022, which reads the build profile, stays silent on it.
-- It does not run the sandbox exploits, check a deployed contract, or read private repositories.
+- It does not run the sandbox exploits, run `preflight account`'s checks on a deployed contract, or read private repositories. Its "Check a contract you know" box reads only a deployed contract's code hash, its full-access key count and the registry's verdict for that code.
 - GitHub's listing requests (two per scan) go to api.github.com, which allows 60 an hour per IP without a sign-in.
 - Browsers will not load WebAssembly from `file://`, so open the page through `make -C web serve`.
 - The headline is a count of pattern matches by severity, never a verdict.

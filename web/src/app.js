@@ -7,6 +7,7 @@ import { createSession } from './session.js';
 import { RULE_WORDS } from './swap-agent.js';
 import { mountSurvey } from './survey.js';
 import { mountSwap } from './swap-view.js';
+import { mountAccountCheck } from './account-check-view.js';
 import { countBySeverity, h, plural, renderFindings, renderProblem, renderScanning, renderTally, renderVerdict, sortFindings, validate, verdict } from './report.js';
 
 const $ = (id) => document.getElementById(id);
@@ -193,3 +194,4 @@ copyOnClick(document);
 mountSwap();
 mountSurvey();
 boot();
+mountAccountCheck();

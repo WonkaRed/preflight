@@ -115,7 +115,7 @@ It was run once over 142 mainnet contracts (tokens, NFT contracts, DAOs and stak
 make -C web serve   # build, then serve it at http://127.0.0.1:8000/
 ```
 
-`make -C web build` assembles `web/dist/` (the whole site, any static host will do) and `make -C web test` runs the page's tests against the real wasm. Browsers will not load WebAssembly from `file://`, so open it through `serve`. The page runs the same rules as the command line and its output matches `--json` byte for byte, apart from limits (deeply nested code, a single pasted file, no sandbox exploits, no deployed-contract check, GitHub's rate limit) listed in [web-page-limits.md](web-page-limits.md). The headline is a count of pattern matches by severity, never a verdict. More in [web/README.md](../web/README.md).
+`make -C web build` assembles `web/dist/` (the whole site, any static host will do) and `make -C web test` runs the page's tests against the real wasm. Browsers will not load WebAssembly from `file://`, so open it through `serve`. The page runs the same rules as the command line and its output matches `--json` byte for byte, apart from limits (deeply nested code, a single pasted file, no sandbox exploits, no `preflight account` check of a deployed contract (the page's account check only reads its code hash, its full-access keys and the registry's verdict), GitHub's rate limit) listed in [web-page-limits.md](web-page-limits.md). The headline is a count of pattern matches by severity, never a verdict. More in [web/README.md](../web/README.md).
 
 ## Built on
 

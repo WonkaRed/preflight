@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { REPO_TREE_URL } from '../src/config.js';
+import { NETWORKS } from '../src/account-check.js';
 import { parseRecorded } from '../src/swap.js';
 import { SWAP_CONFIG } from '../src/swap-config.js';
 import { mainnetSurvey, recordedSwaps, siteData } from '../tools/site-data.mjs';
@@ -31,11 +32,11 @@ test('everything the page loads is in dist, and nothing is loaded from elsewhere
   for (const name of wanted) assert.ok(present.includes(name), `${name} is referenced but not in dist`);
   const csp = html.match(/Content-Security-Policy" content="([^"]+)"/)[1];
   const connect = csp.match(/connect-src ([^;]+);/)[1].split(' ');
-  assert.deepEqual(connect, ["'self'", 'https://api.github.com', 'https://raw.githubusercontent.com', ...SWAP_CONFIG.rpcUrls.map((url) => new URL(url).origin)], 'the Swap\'s RPC origins, and only they, are allowed by the CSP');
+  assert.deepEqual(connect, ["'self'", 'https://api.github.com', 'https://raw.githubusercontent.com', ...[...new Set([...SWAP_CONFIG.rpcUrls, ...Object.values(NETWORKS).flatMap((network) => network.rpcUrls)].map((url) => new URL(url).origin))]], 'the RPC origins the page reads (the Swap\'s and the account check\'s), and only they, are allowed by the CSP');
   assert.match(csp, /^default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'/);
   for (const name of sources) {
     const hosts = [...read(SRC, name).matchAll(/https?:\/\/([\w.-]+)/g)].map((m) => m[1]);
-    for (const host of hosts) assert.ok(['api.github.com', 'raw.githubusercontent.com', 'github.com', 'test.rpc.fastnear.com', 'near-testnet.drpc.org', 'testnet.near.rocks', 'wonkared.github.io'].includes(host), `${name} mentions ${host}`);
+    for (const host of hosts) assert.ok(['api.github.com', 'raw.githubusercontent.com', 'github.com', 'test.rpc.fastnear.com', 'near-testnet.drpc.org', 'free.rpc.fastnear.com', 'near-mainnet.drpc.org', 'nearblocks.io', 'testnet.nearblocks.io', 'testnet.near.rocks', 'wonkared.github.io'].includes(host), `${name} mentions ${host}`);
   }
   // The page's own address appears only where a link preview reads it: the canonical link and the og:/twitter: tags, never a load.
   const own = html.split('\n').filter((line) => line.includes('wonkared.github.io'));
@@ -101,8 +102,8 @@ test('the scan buttons ship disabled and are enabled only once the scanner has l
 
 test('the Swap comes first on the page, and its small print says the key is public on purpose', () => {
   const at = (needle) => html.indexOf(needle);
-  const order = ['class="swap"', 'id="swap-agent"', 'id="how"', 'id="scan"', 'class="bench"', 'class="honest story"'].map(at);
-  assert.ok(order[0] > 0 && order.every((n, i) => i === 0 || n > order[i - 1]), 'the Swap, the agent, how it works, the scanner, then the limits');
+  const order = ['class="swap"', 'id="swap-agent"', 'id="how"', 'id="check"', 'id="scan"', 'class="bench"', 'class="honest story"'].map(at);
+  assert.ok(order[0] > 0 && order.every((n, i) => i === 0 || n > order[i - 1]), 'the Swap, the agent, how it works, the account check, the scanner, then the limits');
   assert.match(html, /The key in this page is public on purpose: it can only call <code>flip<\/code> on a demo contract/);
   assert.match(read(SRC, 'swap-config.js'), /PUBLIC ON PURPOSE/);
   assert.match(html, /<h1 id="swap-title">/);
@@ -150,7 +151,7 @@ test('the limits stay in full wording, folded into details; scroll reveal hides 
   const css = read(SRC, 'style.css');
   assert.doesNotMatch(css, /\[data-reveal\][^{]*\{/, 'markup alone never hides a section: only the .reveal class, which page.js adds');
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.reveal \{ opacity: 1; transform: none; \} \}/);
-  assert.equal([...html.matchAll(/data-reveal/g)].length, 5, 'agent, how it works, mainnet, scanner, limits');
+  assert.equal([...html.matchAll(/data-reveal/g)].length, 6, 'agent, how it works, mainnet, account check, scanner, limits');
 });
 
 test('the mainnet block leads with the point a zero key count cannot make, before the table', () => {

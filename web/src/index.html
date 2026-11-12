@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://test.rpc.fastnear.com https://near-testnet.drpc.org; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self' https://api.github.com https://raw.githubusercontent.com https://test.rpc.fastnear.com https://near-testnet.drpc.org https://free.rpc.fastnear.com https://near-mainnet.drpc.org; base-uri 'none'; form-action 'none'">
 <title>Preflight: check the code, not the address</title>
 <meta name="description" content="One NEAR testnet address whose contract code flips between a vulnerable and a patched build. An allowlist by account id keeps saying allow; Preflight looks the verdict up by the hash of the deployed code. Also scans contract source in your browser.">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -260,6 +260,41 @@
       <p id="mainnet-limits"></p>
     </details>
     <p class="survey-links"><a href="https://github.com/WonkaRed/preflight/blob/main/docs/mainnet-survey.md">The survey in the repository</a>, with the command that reproduces it.</p>
+  </section>
+
+  <section class="check story" id="check" aria-labelledby="check-title" data-reveal>
+    <div class="story-head">
+      <h2 id="check-title">Check a contract you know</h2>
+      <p class="story-sub">Type any NEAR account. Preflight reads the chain right now and says what its guard would do before an agent paid it.</p>
+      <p class="story-tech">Read-only: the page asks public NEAR servers and Preflight's registry, and sends no transaction. Nothing you type goes anywhere else.</p>
+    </div>
+
+    <noscript><p class="problem-static">This check reads the chain from your browser, so it needs JavaScript. Nothing is sent anywhere.</p></noscript>
+
+    <div class="check-bench">
+      <form class="input" id="check-form" aria-label="Which account to check" novalidate>
+        <div class="pane">
+          <fieldset class="choice">
+            <legend>Network</legend>
+            <div class="segment" role="radiogroup" aria-label="Which NEAR network">
+              <label><input type="radio" name="check-net" value="mainnet" checked><span>Mainnet</span></label>
+              <label><input type="radio" name="check-net" value="testnet"><span>Testnet</span></label>
+            </div>
+          </fieldset>
+          <label class="field" for="check-account">NEAR account</label>
+          <input id="check-account" name="account" type="text" maxlength="100" placeholder="wrap.near" spellcheck="false" autocomplete="off" autocapitalize="off">
+          <fieldset class="choice">
+            <legend>Or try one</legend>
+            <div id="check-chips" class="chips"></div>
+          </fieldset>
+          <div class="actions">
+            <button type="submit" class="btn" id="check-go" disabled>Check this account</button>
+          </div>
+        </div>
+      </form>
+
+      <div class="output" id="check-result" role="region" aria-label="Check result" aria-live="polite"></div>
+    </div>
   </section>
 
   <section class="scan story" id="scan" aria-labelledby="scan-title" data-reveal>
