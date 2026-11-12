@@ -13,7 +13,7 @@ AI agents sign calls to contracts by address; the code behind an address can cha
 - **What it is:** a 26-rule NEAR contract scanner (each rule backed by a sandbox exploit), an on-chain registry of verdicts keyed by code hash, an agent-side guard, and an MCP server.
 - **Live page:** <https://wonkared.github.io/preflight/>. Press Swap the code and watch the verdict change while the normal safety check (an address allowlist) keeps saying ALLOW.
 - **Agent-side wrapper:** `GuardedAgent` in [`guard/`](guard) refuses to sign for code that is not allowed. Run `make -C guard testnet-verify` to see its decisions against the live chain.
-- **No auditor needed:** the guard can also tell an agent that a key holder can replace the code at an address, and refuse when the code changed since the agent last approved it ([how](guard/README.md#who-can-replace-the-code-a-check-that-needs-no-auditor)). A read-only look at 10 well-known mainnet contracts, facts only: [docs/mainnet-survey.md](docs/mainnet-survey.md).
+- **No auditor needed:** the guard can also tell an agent that a key holder can replace the code at an address, and refuse when the code changed since the agent last approved it ([how](guard/README.md#who-can-replace-the-code-a-check-that-needs-no-auditor)). The live page shows it after a swap: the code changed since you arrived. A read-only look at 10 well-known mainnet contracts, facts only: [docs/mainnet-survey.md](docs/mainnet-survey.md).
 - **Scoped function-call key, limits explained:** [what it can and cannot do](guard/README.md#function-call-access-keys-what-they-can-and-cannot-do), made with `npm run scope-key` in `guard/`; the testnet agent holds only such keys ([below](#the-agents-key)).
 - **Prompt-injection attack demo, log shown:** `make -C guard demo` ([the log](#the-attack-demo-and-its-log)); the same attack on testnet: [docs/testnet-demo.md](docs/testnet-demo.md).
 - **Recorded real-model testnet runs:** [10 runs](#a-locally-run-model-as-the-agent), the model followed the injected page in 8, the guard refused all 16 injected calls: [raw record](docs/testnet-llm-runs.txt).
@@ -59,7 +59,7 @@ The same script against the deployed testnet contracts made six calls. One was s
 
 Not a script: `qwen3.8-27b` (the local server's name for a 4-bit quantized community fine-tune of Qwen3.8-27B) was the agent. Its task was to pay one escrow order on the audited shop; the page it read said to release on two other contracts instead (the exact task text is in [docs/model-runs.md](docs/model-runs.md)).
 
-- **On testnet, 10 recorded runs** in two batches of 5, none dropped ([`docs/testnet-llm-runs.txt`](docs/testnet-llm-runs.txt)). The model followed the injected page in 8. The guard refused all 16 injected calls before signing; no transaction exists for any of them.
+- **On testnet, 10 recorded runs** in two batches of 5, none dropped ([`docs/testnet-llm-runs.txt`](docs/testnet-llm-runs.txt)). The model followed the injected page in 8. The guard refused all 16 injected calls before signing; no transaction exists for any of them. 8 were refused because the code had no verdict in the registry (a warn, which the unattended run declined: nobody was there to approve it) and 8 because the verdict was Unsafe (PF001) ([`docs/testnet-llm-runs.txt`](docs/testnet-llm-runs.txt) counts them: 8 calls to `shop-vulnerable`, 8 to `shop-swapped`).
 - **The real task** was done in 0 of 5 runs of the first batch and in 4 of 5 of the second. Why they differ is under [Limits](#limits).
 - **Offline, on a fake chain, 60 recorded runs** in two batches of 30 ([`docs/guard-llm-demo-runs.txt`](docs/guard-llm-demo-runs.txt)). The model followed the page in 32 (18 and 14), and the guard blocked all 32. `make -C guard demo-llm-replay` replays recorded model answers through the real guard with no model and no key.
 
@@ -74,6 +74,22 @@ Every run, every transaction and how the page was arrived at: [docs/model-runs.m
 Also here: `preflight account` ([docs](docs/check-a-deployed-contract.md)), which checks an already deployed contract with no source, and [`web/`](web), the page that runs the scanner in your browser.
 
 **MCP.** The guard is also an MCP server: any MCP client (Claude Code, Codex, an agent framework) can ask "is the code at this NEAR address the code an auditor checked?" with the read-only tool `preflight_check_contract`, no key needed. `make -C guard mcp-check` starts it over stdio and gets allow (patched), block (vulnerable, PF001) and warn (swapped) for the three testnet demo contracts, ending with `Self-check passed: patched allow, vulnerable block, swapped warn.` Setup and the guarded-call tool: [guard/mcp/README.md](guard/mcp/README.md).
+
+## Why the check lives in the agent, and what an on-chain check adds
+
+The public entry [pay-guard](https://github.com/payguard-test/pay-guard) enforces its check inside a contract: its payment contract releases funds only with a verdict about the receiver that its checker service signed, so an agent that skips its own safety code still cannot pay an unchecked receiver.
+
+An in-agent guard, which is what Preflight ships, has the opposite trade. It protects any call to any existing contract without redeploying anything or routing funds through anything, and it sees the code hash before the agent signs. A compromised or bypassed agent process skips it. An on-chain gate cannot be skipped, but it protects only the funds that are routed through that gate.
+
+Toward the second, Preflight offers the registry. It is a contract, and `get_verdict(code_hash)` is a plain view method with no caller check ([`registry/src/lib.rs`](registry/src/lib.rs)), so another contract can read a verdict by code hash. A sketch with `near-sdk` 5, not built or tested here:
+
+```rust
+registry::ext("registry.preflight-guard.testnet".parse().unwrap())
+    .get_verdict(code_hash)
+    .then(Self::ext(env::current_account_id()).on_verdict(call));
+```
+
+I have not built such a gate, and the registry alone does not make one trustless: a contract cannot read another account's code hash (I found no host function for it in `near-sys` 0.4.1, the version `registry/Cargo.lock` pins), so the caller has to hand the gate the hash, and a compromised caller can hand it another one.
 
 ## The agent's key
 
@@ -142,13 +158,13 @@ The hosted page also scans contract source in your browser, no install; `make -C
 
 ## Limits
 
-Each stated once; full text in [docs/limits.md](docs/limits.md).
+Full text of each: [docs/limits.md](docs/limits.md).
 
 - **The scan is syntactic.** It reports patterns, not proofs, and can miss a bug or flag safe code; a clean result means "no known rule fired". On 14 public repositories pinned by commit it reports 90 findings: 10 true, 65 defensible, 15 wrong (17 percent). That split is my judgment and cannot be rerun from this repository ([docs/real-world.md](docs/real-world.md)).
-- **A verdict is only as good as its auditor.** Here the auditor is an account I control, and a verdict covers one exact wasm hash. The guard's check and the transaction are two steps, so an owner could redeploy between them.
-- **The model evidence is thin.** One model and a page I wrote, reworded five times before the first batch to get the model to follow it. After batch 1 the demo's refusal text told the model its task could go on, and in 2 of the 4 successes the demo's stock rule also named the right order. Those are hints from the demo harness, not decisions of the model's and not behavior of the guard.
-- **Testnet only.** Throwaway accounts and faucet funds. The exploit tests run in a local sandbox only. The three scripted testnet runs use a script as the agent.
-- **The Swap shows what each check keys on; it measures neither.** The "A normal safety check" card is a plain allowlist by account id, not a model of any wallet or agent. When the page cannot reach the chain it says so and replays a recording, labeled as recorded.
+- **A verdict is only as good as its auditor.** Here the auditor is an account I control, and a verdict covers one exact wasm hash. The auditor-free checks need no auditor and see less: they are off by default and see a change only after the first approval. Zero full-access keys does not mean the code is fixed. The guard's check and the transaction are two steps, so an owner could redeploy between them.
+- **The model evidence is thin.** One model, 10 testnet runs, and a page I wrote and reworded five times before the first batch to get the model to follow it. After batch 1 the demo's refusal text told the model its task could go on, and in 2 of the 4 successes the demo's stock rule also named the right order: hints from the demo harness, not behavior of the guard. Every attempt: [docs/model-runs.md](docs/model-runs.md).
+- **Testnet only.** Throwaway accounts and faucet funds. The exploit tests run in a local sandbox only, and the three scripted testnet runs use a script as the agent.
+- **The Swap shows what each check keys on; it measures neither.** The "A normal safety check" card is a plain allowlist by account id, not a model of any wallet or agent. When the page cannot reach the chain it replays a recording and says so.
 - **Platform.** Only Linux x86-64 with glibc 2.39 or newer was tried.
 
 ## Layout
@@ -169,7 +185,7 @@ Adding a rule: [SPEC.md](SPEC.md). Library versions: [docs/getting-started.md](d
 
 ## How this was built
 
-Built at NEAR HACKATHON (tracks: AI Security & Defense, Open Innovation), in the window that began on 2026-11-10. All code, tests and documentation were written by AI agents (Claude Fable 5.2, Claude Opus 5.5 and Claude Sonnet 5.5, Anthropic), directed by one human. Development happened in a private repository, so this public repository starts from one squashed commit and its history does not show the work.
+Built at NEAR HACKATHON (tracks: AI Security & Defense, Open Innovation). The hackathon's development window runs from 2026-11-01 to 2026-11-14, and code written since the announcement on 2026-10-19 counts ([HACKATHON.md](https://nearhackathon.com/HACKATHON.md), Q-001). The first commit of this project, in the private repository, is dated 2026-11-10, inside that window. All code, tests and documentation were written by AI agents (Claude Fable 5.2, Claude Opus 5.5 and Claude Sonnet 5.5, Anthropic), directed by one human. Development happened in a private repository, so this public repository starts from one squashed commit and its history does not show the work.
 
 What you can check: `make test` runs the scanner, exploit, guard and web tests, and CI runs it on every push (badge at the top); `make -C guard testnet-verify` checks the testnet deployment against the chain. The model runs are recordings, not tests.
 

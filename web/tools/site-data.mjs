@@ -34,3 +34,32 @@ export function siteData() {
   }));
   return { examples, proofs };
 }
+
+const BASE58 = '[1-9A-HJ-NP-Za-km-z]';
+
+/**
+ * `docs/mainnet-survey.md` as the page's "On mainnet today" block shows it: the header sentence, the read date and endpoint, and the
+ * table's rows, all taken from that page so the two cannot disagree. It throws when the page no longer has the shape this reads
+ * (a row that does not parse, a row read on another day), so a rewritten survey stops the build instead of shipping a half-empty block.
+ */
+export const mainnetSurvey = () => surveyFrom(read('docs/mainnet-survey.md'));
+
+/** `mainnetSurvey` for the text of the survey page. */
+export function surveyFrom(text) {
+  const pick = (pattern, what) => {
+    const found = pattern.exec(text);
+    if (!found) throw new Error(`docs/mainnet-survey.md has no ${what}`);
+    return found.slice(1);
+  };
+  const [summary] = pick(/^# .+\n\n(.+)\n/, 'sentence under its title');
+  const [readOn, endpoint] = pick(/^Read on (\d{4}-\d{2}-\d{2}) from NEAR mainnet through the RPC endpoint ([\w.-]+)/m, '"Read on <date> ... through the RPC endpoint <host>" paragraph');
+  const [keyMeaning] = pick(/(A full-access key can deploy new code to its account at any time; the count is [^.\n]+\.)/, 'sentence saying what a full-access key can do');
+  const [notEstablished] = pick(/^(Not established: .+)$/m, '"Not established:" paragraph');
+  const rows = [...text.matchAll(new RegExp(`^\\| \`([^\`]+)\` \\| \`(${BASE58}{32,44})\` \\| (\\d+) \\| (\\d{4}-\\d{2}-\\d{2}) \\|$`, 'gm'))]
+    .map(([, account, codeHash, keys, date]) => ({ account, codeHash, fullAccessKeys: Number(keys), date }));
+  const tableLines = text.split('\n').filter((line) => line.startsWith('| `')).length;
+  if (rows.length === 0 || rows.length !== tableLines) throw new Error(`docs/mainnet-survey.md: ${tableLines} table rows, ${rows.length} of them parse`);
+  const stray = rows.find((row) => row.date !== readOn);
+  if (stray) throw new Error(`docs/mainnet-survey.md: ${stray.account} was read on ${stray.date}, not ${readOn}`);
+  return { summary, keyMeaning, readOn, endpoint, notEstablished, rows: rows.map(({ date, ...row }) => row) };
+}

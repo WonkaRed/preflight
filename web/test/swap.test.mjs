@@ -11,7 +11,7 @@ const recorded = parseRecorded(recordedJson);
 
 function setup(chain, { config = CONFIG, rec = recorded, env = {} } = {}) {
   const states = [];
-  const swap = createSwap({ config, recorded: rec, onChange: (s) => states.push(s), env: { fetch: (...args) => chain.fetch(...args), now: () => chain.nowMs, sleep: async () => {}, ...env } });
+  const swap = createSwap({ config, recorded: rec, onChange: (s) => states.push(s), env: { fetch: (...args) => chain.fetch(...args), now: () => chain.nowMs, sleep: async () => {}, storage: memoryStorage(), ...env } });
   return { swap, states, state: () => swap.getState() };
 }
 const sends = (chain) => chain.calls.filter((c) => c.method === 'send_tx');
@@ -640,4 +640,81 @@ test('a stale nonce right after a copy of our own transaction was taken is the t
   await swap.flip();
   assert.equal(state().tx.stage, 'done');
   assert.equal(net.log.filter((c) => c.method === 'query' && c.params.request_type === 'view_access_key').length, 1, 'never signed a second time');
+});
+
+// ---- The auditor-free check: the fingerprint first seen, and the account's keys ----------------------------------------
+
+const idle = async () => { for (let i = 0; i < 20; i++) await new Promise((resolve) => setImmediate(resolve)); };
+const memoryStorage = () => { const map = new Map(); return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => { map.set(k, String(v)); } }; };
+
+test('the first live read pins the fingerprint, and a swap leaves the pin and changes the code: no registry involved', async () => {
+  const chain = fakeChain();
+  const { swap, state } = setup(chain, { env: { storage: memoryStorage() } });
+  assert.equal(state().arrival, null);
+  await swap.refresh();
+  assert.equal(state().arrival, HASH.vulnerable);
+  await swap.flip();
+  assert.equal(state().codeHash, HASH.patched);
+  assert.equal(state().arrival, HASH.vulnerable, 'the pin is where the visitor arrived');
+});
+
+test('a reload in the same tab keeps the pin, even when the code changed in between', async () => {
+  const storage = memoryStorage();
+  const first = setup(fakeChain(), { env: { storage } });
+  await first.swap.refresh();
+  const chain = fakeChain();
+  chain.build = 'patched';
+  const second = setup(chain, { env: { storage } });
+  await second.swap.refresh();
+  assert.deepEqual([second.state().arrival, second.state().codeHash], [HASH.vulnerable, HASH.patched]);
+});
+
+test('the account\'s full-access keys are counted once per code hash and the count says which code it was read for', async () => {
+  const chain = fakeChain();
+  const { swap, state } = setup(chain, { env: { storage: memoryStorage() } });
+  await swap.refresh();
+  await idle();
+  assert.deepEqual(state().keys, { full: 0, codeHash: HASH.vulnerable });
+  await swap.refresh();
+  await idle();
+  const lists = () => chain.calls.filter((c) => c.params.request_type === 'view_access_key_list');
+  assert.equal(lists().length, 1, 'the same code is not asked about again');
+  assert.equal(lists()[0].params.account_id, 'chameleon.example.testnet');
+  chain.keys = [{ public_key: 'ed25519:k', access_key: { nonce: 1, permission: 'FullAccess' } }];
+  await swap.flip();
+  await idle();
+  assert.equal(lists().length, 2, 'new code, new read');
+  assert.deepEqual(state().keys, { full: 1, codeHash: HASH.patched });
+});
+
+test('a key list that cannot be read is no key fact, tried a few times for one code hash and then left alone', async () => {
+  const chain = fakeChain();
+  chain.keyListError = 'UNKNOWN_ACCOUNT';
+  const { swap, state } = setup(chain, { env: { storage: memoryStorage() } });
+  for (let i = 0; i < 6; i++) { await swap.refresh(); await idle(); }
+  assert.equal(state().keys, null);
+  assert.equal(state().mode, 'live', 'the verdicts do not wait for it');
+  assert.equal(chain.calls.filter((c) => c.params.request_type === 'view_access_key_list').length, 3);
+});
+
+test('a partial key list is no key fact either', async () => {
+  const chain = fakeChain();
+  const answer = chain.fetch;
+  chain.fetch = async (url, init) => {
+    const response = await answer(url, init);
+    if (JSON.parse(init.body).params?.request_type !== 'view_access_key_list') return response;
+    return { ...response, json: async () => ({ jsonrpc: '2.0', id: 'x', result: { keys: [], last_key: 'ed25519:next' } }) };
+  };
+  const { swap, state } = setup(chain, { env: { storage: memoryStorage() } });
+  await swap.refresh();
+  await idle();
+  assert.equal(state().keys, null);
+});
+
+test('the recording is not a live read: it pins nothing and counts no keys', async () => {
+  const chain = fakeChain();
+  chain.down = true;
+  const { swap, state } = setup(chain, { env: { storage: memoryStorage() } });
+  await swap.refresh();
+  assert.deepEqual([state().mode, state().arrival, state().keys], ['recorded', null, null]);
 });

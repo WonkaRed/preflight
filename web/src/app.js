@@ -5,6 +5,7 @@ import { compileScanner, loadScanner } from './scanner.js';
 import { copyOnClick, revealOnScroll } from './page.js';
 import { createSession } from './session.js';
 import { RULE_WORDS } from './swap-agent.js';
+import { mountSurvey } from './survey.js';
 import { mountSwap } from './swap-view.js';
 import { countBySeverity, h, plural, renderFindings, renderProblem, renderScanning, renderTally, renderVerdict, sortFindings, validate, verdict } from './report.js';
 
@@ -190,4 +191,5 @@ for (const name of TABS) {
 revealOnScroll(document, { calm: matchMedia('(prefers-reduced-motion: reduce)').matches });
 copyOnClick(document);
 mountSwap();
+mountSurvey();
 boot();

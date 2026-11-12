@@ -72,6 +72,14 @@
           </details>
         </article>
       </div>
+      <div class="swap-pin" id="swap-pin" hidden>
+        <p class="pin-line"><b>No auditor needed for this one:</b> the code changed since you arrived.<span class="pin-inline"> Fingerprint then <button type="button" class="hash" id="pin-then" data-copy aria-label="Copy the full code fingerprint (hash) you arrived to"></button>, now <button type="button" class="hash" id="pin-now" data-copy aria-label="Copy the full code fingerprint (hash) live now"></button>.</span></p>
+        <details class="fold pin-fold">
+          <summary>Why no key list can tell you this</summary>
+          <p class="pin-fp">Fingerprint then <button type="button" class="hash" id="pin-fold-then" data-copy aria-label="Copy the full code fingerprint (hash) you arrived to"></button>, now <button type="button" class="hash" id="pin-fold-now" data-copy aria-label="Copy the full code fingerprint (hash) live now"></button>.</p>
+          <p id="pin-keys"></p>
+        </details>
+      </div>
     </div>
 
     <p class="swap-next"><a href="#swap-agent">Now watch an agent get told to pay it</a></p>
@@ -164,6 +172,20 @@
         <a href="https://github.com/WonkaRed/preflight/tree/main/guard">See the guard</a>
       </li>
     </ol>
+  </section>
+
+  <section class="mainnet story" id="mainnet" aria-labelledby="mainnet-title" data-reveal>
+    <div class="story-head">
+      <h2 id="mainnet-title">On mainnet today</h2>
+      <p class="story-sub" id="mainnet-sub">Well-known NEAR mainnet contracts, read from the chain.</p>
+      <p class="story-tech" id="mainnet-read"></p>
+    </div>
+    <div class="survey" id="mainnet-table"><p class="hint">Loading the survey.</p></div>
+    <details class="fold survey-fold">
+      <summary>What a key count cannot tell you</summary>
+      <p id="mainnet-limits"></p>
+    </details>
+    <p class="survey-links"><a href="https://github.com/WonkaRed/preflight/blob/main/docs/mainnet-survey.md">The survey in the repository</a>, with the command that reproduces it.</p>
   </section>
 
   <section class="scan story" id="scan" aria-labelledby="scan-title" data-reveal>

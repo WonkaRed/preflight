@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { recordedSwaps, REPO_ROOT, siteData } from './site-data.mjs';
+import { mainnetSurvey, recordedSwaps, REPO_ROOT, siteData } from './site-data.mjs';
 
 const web = fileURLToPath(new URL('..', import.meta.url));
 const dist = `${web}dist`;
@@ -20,4 +20,5 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   copyFileSync(`${targetDir()}/${WASM}`, `${dist}/preflight.wasm`);
   writeFileSync(`${dist}/site-data.json`, JSON.stringify(siteData()));
   writeFileSync(`${dist}/swap-recorded.json`, recordedSwaps());
+  writeFileSync(`${dist}/mainnet-survey.json`, JSON.stringify(mainnetSurvey()));
 }

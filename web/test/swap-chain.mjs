@@ -44,6 +44,7 @@ export function fakeChain() {
     // The last swap, for the page to find on chain: blocks come every `blockMs`, the swap ran at `lastFlipMs` (a block's time), and its
     // transaction is `swapTx`. `skipped` heights are ones the chain never produced; `statusLive` is what the switch says is live.
     blockMs: 1000, skipped: new Set(), swapTx: null, statusLive: undefined,
+    keys: [], keyListError: null, // the chameleon's access keys, as view_access_key_list lists them: none, as on testnet
     down: false, accessKeyError: null, statusOverride: undefined, codeOverride: undefined,
     calls: [],
     taken: new Set(),
@@ -94,6 +95,7 @@ export function fakeChain() {
         const wasm = chain.codeOverride ?? WASM[chain.build];
         return { result: { code_base64: Buffer.from(wasm).toString('base64'), hash: HASH[chain.build] } };
       }
+      if (type === 'view_access_key_list') return chain.keyListError ? rpcError(chain.keyListError) : { result: { keys: chain.keys, block_height: 1, block_hash: vector.tx.blockHash } };
       if (type === 'view_access_key') return chain.accessKeyError ? rpcError(chain.accessKeyError) : { result: { nonce: chain.nonce, permission: 'FullAccess' } };
       if (type === 'call_function' && account === 'switch.example.testnet' && params.method_name === 'status') {
         if (chain.statusOverride !== undefined) return view(chain.statusOverride);

@@ -10,11 +10,14 @@ const EXPLORER = 'https://testnet.near.rocks';
 const recorded = parseRecorded(recordedJson);
 const view = (state, now = 0) => viewModel(state, { now, explorerUrl: EXPLORER });
 
+// A tab's session storage of its own for every state: Node's global one would carry a pin from one test into the next.
+const fresh = () => { const map = new Map(); return { getItem: (k) => map.get(k) ?? null, setItem: (k, v) => { map.set(k, String(v)); } }; };
+
 async function liveState(build = 'vulnerable', mutate = () => {}) {
   const chain = fakeChain();
   chain.build = build;
   mutate(chain);
-  const swap = createSwap({ config: CONFIG, recorded, env: { fetch: (...a) => chain.fetch(...a), now: () => chain.nowMs, sleep: async () => {} } });
+  const swap = createSwap({ config: CONFIG, recorded, env: { fetch: (...a) => chain.fetch(...a), now: () => chain.nowMs, sleep: async () => {}, storage: fresh() } });
   await swap.refresh();
   return { swap, chain, state: swap.getState() };
 }
@@ -122,7 +125,7 @@ test('empty and loading: no verdict word is invented, and the button is off', ()
 
 // ---- paint ---------------------------------------------------------------------------------------------------------
 
-const IDS = ['status', 'detail', 'source', 'address', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfTech', 'pfBuild', 'pfHash', 'before', 'beforeTitle', 'beforeWord', 'beforeRules', 'beforeReason', 'beforeHash', 'beforeTx', 'button', 'hint', 'flips', 'tx'];
+const IDS = ['status', 'detail', 'source', 'address', 'trustWord', 'trustNote', 'pfCard', 'pfWord', 'pfRules', 'pfLine', 'pfTech', 'pfBuild', 'pfHash', 'before', 'beforeTitle', 'beforeWord', 'beforeRules', 'beforeReason', 'beforeHash', 'beforeTx', 'pin', 'pinThen', 'pinNow', 'pinFoldThen', 'pinFoldNow', 'pinKeys', 'button', 'hint', 'flips', 'tx'];
 function fakeSection() {
   const doc = fakeDocument();
   const els = Object.fromEntries(IDS.map((name) => [name, Object.assign(doc.createElement('div'), { textContent: '' })]));
@@ -190,7 +193,7 @@ test('mountSwap reads nothing while the tab is hidden, reads at once when it is 
     assert.equal(chain.calls.length, 0, 'hidden: no request');
     doc.hidden = false;
     listeners.visibilitychange();
-    for (let wait = 0; wait < 200 && els.get('pf-word').textContent === '...'; wait++) await new Promise((resolve) => setImmediate(resolve));
+    for (const until = Date.now() + 5000; Date.now() < until && els.get('pf-word').textContent === '...';) await new Promise((resolve) => setImmediate(resolve)); // time, not turns: the hash is computed off the main thread
     assert.ok(chain.calls.length > 0, 'shown: it reads at once');
     assert.equal(els.get('pf-word').textContent, 'BLOCK');
     assert.equal(els.get('agent-word').textContent, 'REFUSED', 'the agent panel plays on the same read');
@@ -301,4 +304,45 @@ test('every element the section paints into is in the page', async () => {
   const { readFileSync } = await import('node:fs');
   const html = readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
   for (const id of Object.values(PAGE_IDS)) assert.match(html, new RegExp(`id="${id}"`), id);
+});
+
+// ---- The auditor-free line --------------------------------------------------------------------------------------
+
+test('the code-changed line appears only when the live code is not the code the visitor arrived to', async () => {
+  const { state } = await liveState('vulnerable');
+  assert.equal(view(state).pin, null, 'arrived and nothing changed');
+  assert.equal(view({ ...state, arrival: null }).pin, null, 'no pin yet');
+  const changed = view({ ...state, arrival: HASH.patched, keys: { full: 0, codeHash: state.codeHash } }).pin;
+  assert.deepEqual([changed.then, changed.now], [HASH.patched, HASH.vulnerable]);
+  assert.equal(view({ ...state, arrival: HASH.patched, mode: 'recorded', reason: 'rpc-down' }).pin, null, 'a recording is not a live read');
+});
+
+test('the key fact is the honest sentence for none, one and several keys, and says so when the list could not be read', async () => {
+  const { state } = await liveState('patched');
+  const pin = (keys) => view({ ...state, arrival: HASH.vulnerable, keys }).pin.keys;
+  assert.equal(pin({ full: 0, codeHash: HASH.patched }), 'Read from the chain just now: this account has no full-access key, and its code still changes, through one of its own methods. That is exactly why Preflight pins the fingerprint instead of trusting keys.');
+  assert.match(pin({ full: 1, codeHash: HASH.patched }), /holds 1 full-access key, and each can deploy new code to it at any time/);
+  assert.match(pin({ full: 3, codeHash: HASH.patched }), /holds 3 full-access keys/);
+  assert.equal(pin(null), 'The account\'s key list could not be read just now.');
+  assert.equal(pin({ full: 0, codeHash: HASH.vulnerable }), 'The account\'s key list could not be read just now.', 'a count read for other code is not the fact about this code');
+});
+
+test('paint shows the line with the fingerprints as text and the full values as titles, and hides it again', async () => {
+  const { doc, els } = fakeSection();
+  const { state } = await liveState('patched');
+  paint(doc, els, view({ ...state, arrival: HASH.vulnerable, keys: { full: 0, codeHash: HASH.patched } }));
+  assert.equal(els.pin.hidden, false);
+  assert.deepEqual([els.pinThen.textContent, els.pinNow.textContent, els.pinFoldThen.textContent, els.pinFoldNow.textContent], [HASH.vulnerable, HASH.patched, HASH.vulnerable, HASH.patched]);
+  assert.equal(els.pinNow.attrs.title, HASH.patched);
+  assert.match(els.pinKeys.textContent, /no full-access key/);
+  paint(doc, els, view(state));
+  assert.equal(els.pin.hidden, true);
+});
+
+test('the page says it plainly: no auditor needed, the code changed since you arrived, fingerprint then and now', async () => {
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
+  assert.match(html, /<b>No auditor needed for this one:<\/b> the code changed since you arrived\.<span class="pin-inline"> Fingerprint then <button[^>]*id="pin-then"[^>]*><\/button>, now <button[^>]*id="pin-now"[^>]*><\/button>\.<\/span>/);
+  assert.match(html, /<details class="fold pin-fold">\s*<summary>Why no key list can tell you this<\/summary>/);
+  assert.match(html, /<div class="swap-pin" id="swap-pin" hidden>/, 'hidden until there is a change to show');
 });

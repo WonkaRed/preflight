@@ -222,6 +222,16 @@ a { color: var(--focus); }
 .fine { margin-top: 1rem; color: var(--muted); font-size: 0.88rem; }
 .swap-print { margin: 0.5rem 0 0; max-width: 56rem; line-height: 1.5; }
 
+/* The auditor-free line under the two cards: shown only once the code at the address is not the code the visitor arrived to. */
+.swap-pin { margin-top: 0.8rem; padding: 0.5rem 1rem; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 1.25rem; background: var(--surface); border: 1px solid var(--line); border-left: 5px solid var(--ink); border-radius: 12px; }
+.pin-line { margin: 0; padding-block: 0.3rem; flex: 1 1 auto; }
+.pin-line .hash { font-size: 0.85rem; }
+.fold.pin-fold { flex: 0 0 auto; border-top: 0; }
+.fold.pin-fold[open] { flex-basis: 100%; }
+.fold.pin-fold summary { padding-block: 0.3rem; color: var(--muted); font-size: 0.9rem; }
+.fold.pin-fold > p { margin: 0 0 0.6rem; max-width: 46rem; font-size: 0.95rem; line-height: 1.5; }
+.pin-fold > .pin-fp { display: none; }
+
 /* The code that ran here before the last swap, shown inside the Preflight card while its live verdict is not a BLOCK. */
 .before { margin-top: 0.7rem; padding-top: 0.7rem; border-top: 1px solid color-mix(in srgb, currentColor 35%, transparent); }
 .before-title { margin: 0; font: 800 1.05rem/1.3 var(--sans); }
@@ -265,6 +275,11 @@ a { color: var(--focus); }
   .before-said { margin-top: 0.25rem; font-size: 0.95rem; line-height: 1.35; }
   .before-meta { margin-top: 0.3rem; font-size: 0.82rem; }
   #swap-pf:has(.before:not([hidden])) > .hashline { display: none; }
+  .swap-pin { margin-top: 0.6rem; padding: 0.35rem 0.8rem; }
+  .pin-line { font-size: 0.9rem; line-height: 1.35; padding-block: 0.15rem; }
+  .pin-inline { display: none; }
+  .pin-fold > .pin-fp { display: block; }
+  .fold.pin-fold summary { font-size: 0.85rem; padding-block: 0.2rem; }
   /* The button already says "swap it back": the hint, the swap count and the first card's sub-line give way, so the contrast is on a phone's first screen. */
   .swap:has(.before:not([hidden])) :is(.swap-hint, .swap-flips), .swap:has(.before:not([hidden])) #swap-trust .card-sub { display: none; }
 }
@@ -339,6 +354,24 @@ a { color: var(--focus); }
 .step p.tag { align-self: flex-start; margin: 0.45rem 0 0; font: 700 0.75rem/1.4 var(--mono); }
 .step p.step-tech { margin: 0.6rem 0 1.1rem; font-size: 0.85rem; line-height: 1.45; }
 .step a { margin-top: auto; font-weight: 650; }
+
+/* On mainnet today: a compact table of facts, no colour, because none of it is a verdict */
+.survey { margin-top: 1.5rem; max-width: 46rem; padding: 0.4rem 1.1rem; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; }
+.survey-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
+.survey-table caption { padding: 0.5rem 0 0.2rem; text-align: left; color: var(--muted); font-size: 0.82rem; }
+.survey-table th, .survey-table td { padding: 0.4rem 0.6rem 0.4rem 0; text-align: left; font-weight: 400; border-top: 1px solid var(--line); }
+.survey-table thead th { border-top: 0; color: var(--muted); font-size: 0.82rem; font-weight: 650; }
+.survey-table tbody th code { overflow-wrap: anywhere; }
+.survey-table .num { text-align: right; padding-right: 0; font-variant-numeric: tabular-nums; }
+.survey-table thead th:last-child { text-align: right; padding-right: 0; }
+.survey-fold { max-width: 46rem; margin-top: 0.75rem; }
+.survey-links { margin: 0.5rem 0 0; color: var(--muted); font-size: 0.92rem; }
+@media (max-width: 30rem) {
+  .survey { padding-inline: 0.8rem; }
+  .survey-table { font-size: 0.85rem; }
+  .survey-table th, .survey-table td { padding-right: 0.4rem; }
+  .survey-table .hash { max-width: 8ch; font-size: 0.8rem; }
+}
 
 /* The scanner */
 .bench { margin-top: 2rem; display: grid; gap: 1.25rem; align-items: start; }

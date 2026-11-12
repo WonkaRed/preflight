@@ -2,6 +2,7 @@
 // tested directly), `paint` writes them into the section's elements, and `mountSwap` wires both to the controller.
 // Everything that came from the chain or the recording reaches the page as text (textContent, text nodes), and links are
 // built only from a validated transaction hash or account id plus the configured explorer.
+import { changedSince } from './code-pin.js';
 import { isHash } from './near.js';
 import { clean, h } from './report.js';
 import { createSwap, isAccountId, parseRecorded } from './swap.js';
@@ -27,6 +28,11 @@ const since = (ms) => {
   const [n, unit] = minutes < 1 ? [0, ''] : minutes < 60 ? [minutes, 'minute'] : minutes < 1440 ? [Math.floor(minutes / 60), 'hour'] : [Math.floor(minutes / 1440), 'day'];
   return n === 0 ? 'a moment ago' : `${n} ${unit}${n === 1 ? '' : 's'} ago`;
 };
+
+// What the account's key list says, as a sentence for the fold under the changed-code line. `full` is a count, or null when it could not be read.
+const keyFact = (full) => (full === null ? 'The account\'s key list could not be read just now.'
+  : full === 0 ? 'Read from the chain just now: this account has no full-access key, and its code still changes, through one of its own methods. That is exactly why Preflight pins the fingerprint instead of trusting keys.'
+    : `Read from the chain just now: this account holds ${full} full-access key${full === 1 ? '' : 's'}, and each can deploy new code to it at any time. Preflight pins the fingerprint, so it does not depend on who holds a key.`);
 
 const when = (state) => state.recorded?.recordedAt ?? '';
 
@@ -85,6 +91,10 @@ export function viewModel(state, { now, explorerUrl }) {
     tx: txLink(prior.txHash, 'The swap transaction'),
   };
 
+  // The auditor-free check: no registry, no verdict, only the fingerprint this visitor first saw against the one live now. Live reads only.
+  const change = mode === 'live' ? changedSince(state.arrival, state.codeHash) : null;
+  const pin = change && { ...change, keys: keyFact(state.keys?.codeHash === state.codeHash ? state.keys.full : null) };
+
   const swapping = state.tx !== null && ['pending', 'landing'].includes(state.tx.stage);
   const waitMs = state.waitUntil === null ? 0 : state.waitUntil - now;
   const button = mode === 'recorded' ? { label: 'Replay a recorded swap', disabled: false }
@@ -118,6 +128,7 @@ export function viewModel(state, { now, explorerUrl }) {
       : { word: 'No data', note: '' },
     pf,
     before,
+    pin,
     agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, step: replay ? state.replay : 0, before: prior }),
     hint: HINT[mode] ?? '',
     button,
@@ -158,6 +169,14 @@ export function paint(doc, els, model, { animate = false } = {}) {
     els.beforeHash.setAttribute('title', model.before.hash);
     els.beforeTx.replaceChildren(...(model.before.tx ? [h(doc, 'a', { href: model.before.tx.href, target: '_blank', rel: 'noopener noreferrer' }, model.before.tx.text)] : []));
   }
+  els.pin.hidden = model.pin === null;
+  if (model.pin) {
+    for (const [name, hash] of [['pinThen', model.pin.then], ['pinNow', model.pin.now], ['pinFoldThen', model.pin.then], ['pinFoldNow', model.pin.now]]) {
+      els[name].textContent = hash;
+      els[name].setAttribute('title', hash);
+    }
+    els.pinKeys.textContent = model.pin.keys;
+  }
   els.button.textContent = model.button.label;
   els.button.disabled = model.button.disabled;
   els.hint.textContent = model.hint;
@@ -175,6 +194,7 @@ export const IDS = {
   status: 'swap-status', detail: 'swap-detail', source: 'swap-source', address: 'swap-address', trustWord: 'trust-word', trustNote: 'trust-note',
   pfCard: 'swap-pf', pfWord: 'pf-word', pfRules: 'pf-rules', pfLine: 'pf-line', pfTech: 'pf-tech', pfBuild: 'pf-build', pfHash: 'pf-hash',
   before: 'swap-before', beforeTitle: 'before-title', beforeWord: 'before-word', beforeRules: 'before-rules', beforeReason: 'before-reason', beforeHash: 'before-hash', beforeTx: 'before-tx',
+  pin: 'swap-pin', pinThen: 'pin-then', pinNow: 'pin-now', pinFoldThen: 'pin-fold-then', pinFoldNow: 'pin-fold-now', pinKeys: 'pin-keys',
   button: 'swap-button', hint: 'swap-hint', flips: 'swap-flips', tx: 'swap-tx',
 };
 

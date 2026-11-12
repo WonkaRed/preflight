@@ -3,6 +3,7 @@
 //
 // Chain data is untrusted. Every answer is checked for the shape this file expects before it is used, and anything else
 // is an error, never a verdict. Network access goes through `env.fetch` only, so tests run it against a fake node.
+import { countFullAccessKeys, createArrivalPin } from './code-pin.js';
 import { base58Decode, base58Encode, encodeFunctionCall, isHash, parseSecretKey, signTransaction } from './near.js';
 
 export const POLL_MS = 5000;
@@ -30,6 +31,8 @@ const BUILDS = ['vulnerable', 'patched'];
 // Finding the swap transaction costs a few block reads: bounded, and a courtesy (the link is left out when it cannot be found).
 const SEARCH_READS = 10;
 const LOCATE_TRIES = 3;
+// The account's key list is context for the code-changed line: a few tries per code hash, then the line goes without it.
+const KEY_TRIES = 3;
 
 export const isAccountId = (id) => typeof id === 'string' && id.length >= 2 && id.length <= 64 && ACCOUNT_ID.test(id);
 const isObject = (v) => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -349,6 +352,7 @@ const defaults = () => ({
   now: () => Date.now(),
   sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   subtle: globalThis.crypto?.subtle,
+  storage: (() => { try { return globalThis.sessionStorage; } catch { return null; } })(), // reading it throws where the browser blocks site data
   hidden: () => globalThis.document?.hidden ?? false,
   schedule: (fn, ms) => { const id = setTimeout(fn, ms); return () => clearTimeout(id); },
 });
@@ -365,16 +369,20 @@ const defaults = () => ({
  * state.replay  the recording's current step (0 is before its first swap).
  * state.reconnecting  live data is still shown but the last read failed on every endpoint (a note, not yet a fallback).
  * state.endpoint  the host the last read went through, while live.
+ * state.arrival   the code hash this visitor first saw at the address this session (the pin of the auditor-free check), or null before the first live read.
+ * state.keys      `{ full, codeHash }`: how many full-access keys the account held when its code had this hash, or null when not read (yet) or unreadable.
  */
 export function createSwap({ config, recorded = null, onChange = () => {}, env: overrides = {} }) {
   const env = { ...defaults(), ...overrides };
   const cfg = readConfig(config);
   const seen = { hash: null };
+  const pin = cfg.ok ? createArrivalPin(env.storage, cfg.chameleonId) : null;
   const net = cfg.ok ? createRpc(env, cfg.rpcUrls) : null;
   let state = {
     mode: 'loading', reason: null, detail: '', recorded, replay: 0,
     address: config.chameleonId || recorded?.chameleonId || null,
     codeHash: null, build: null, verdict: null, before: null, flips: null, waitUntil: null, tx: null, reconnecting: false, endpoint: null,
+    arrival: null, keys: null,
   };
   let cancelTimer = () => {};
   let activeUntil = 0;
@@ -385,6 +393,8 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
   let failedReads = 0;
   let located = { ms: null, hash: null, tries: 0 }; // the swap transaction found for the swap at `ms`
   let locating = false;
+  let keysTried = { codeHash: null, tries: 0 };
+  let readingKeys = false;
 
   const set = (patch) => { state = { ...state, ...patch }; onChange(state); };
   const fallback = (reason, detail = '') => set({
@@ -405,7 +415,8 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
         const { latest, ...chain } = await readChain();
         failedReads = 0;
         if (chain.before) chain.before.txHash = located.ms === chain.before.lastFlipMs ? located.hash : null;
-        set({ mode: 'live', reason: null, detail: '', reconnecting: false, endpoint: net.host(), ...chain });
+        set({ mode: 'live', reason: null, detail: '', reconnecting: false, endpoint: net.host(), arrival: pin.see(chain.codeHash), ...chain });
+        if (state.keys?.codeHash !== chain.codeHash) readKeys(chain.codeHash);
         if (chain.before && chain.before.txHash === null) locateSwap(chain.before.lastFlipMs, latest);
       } catch (error) {
         // A blip must not replace data that was live a moment ago: keep it, with a note, for a couple of reads. Reading goes on
@@ -426,6 +437,17 @@ export function createSwap({ config, recorded = null, onChange = () => {}, env: 
     located = { ms, hash, tries: located.ms === ms ? located.tries + 1 : 1 };
     locating = false;
     if (!stopped && state.mode === 'live' && state.before?.lastFlipMs === ms) set({ before: { ...state.before, txHash: hash } });
+  }
+
+  /** Counts the account's full-access keys once per code hash, in the background: the line about a changed code shows it when it is known. */
+  async function readKeys(codeHash) {
+    if (readingKeys || (keysTried.codeHash === codeHash && keysTried.tries >= KEY_TRIES)) return;
+    readingKeys = true;
+    let full = null;
+    try { full = countFullAccessKeys(await query(net, { request_type: 'view_access_key_list', account_id: cfg.chameleonId })); } catch { /* the line shows without the key fact */ }
+    keysTried = { codeHash, tries: keysTried.codeHash === codeHash ? keysTried.tries + 1 : 1 };
+    readingKeys = false;
+    if (!stopped && state.mode === 'live') set({ keys: full === null ? null : { full, codeHash } });
   }
 
   // Nothing live is left to show: the recording takes over for good, and the page stops reading.

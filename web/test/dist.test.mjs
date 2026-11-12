@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { REPO_TREE_URL } from '../src/config.js';
 import { parseRecorded } from '../src/swap.js';
 import { SWAP_CONFIG } from '../src/swap-config.js';
-import { recordedSwaps, siteData } from '../tools/site-data.mjs';
+import { mainnetSurvey, recordedSwaps, siteData } from '../tools/site-data.mjs';
 import { DIST } from './helpers.mjs';
 
 const SRC = new URL('../src/', import.meta.url);
@@ -14,10 +14,11 @@ const sources = readdirSync(SRC).filter((name) => /\.(html|js|css)$/.test(name))
 const html = read(SRC, 'index.html');
 
 test('dist holds every source file unchanged, the wasm module and the generated data', () => {
-  assert.deepEqual(readdirSync(DIST).sort(), [...readdirSync(SRC), 'preflight.wasm', 'site-data.json', 'swap-recorded.json'].sort());
+  assert.deepEqual(readdirSync(DIST).sort(), [...readdirSync(SRC), 'preflight.wasm', 'site-data.json', 'swap-recorded.json', 'mainnet-survey.json'].sort());
   for (const name of readdirSync(SRC)) assert.equal(read(DIST, name), read(SRC, name), `${name} is stale: run make -C web build`);
   assert.deepEqual(JSON.parse(read(DIST, 'site-data.json')), siteData(), 'site-data.json is stale: run make -C web build');
   assert.equal(read(DIST, 'swap-recorded.json'), recordedSwaps(), 'swap-recorded.json is stale: run make -C web build');
+  assert.deepEqual(JSON.parse(read(DIST, 'mainnet-survey.json')), mainnetSurvey(), 'mainnet-survey.json is stale: run make -C web build');
 });
 
 test('everything the page loads is in dist, and nothing is loaded from elsewhere', () => {
@@ -141,7 +142,7 @@ test('the limits stay in full wording, folded into details; scroll reveal hides 
   const css = read(SRC, 'style.css');
   assert.doesNotMatch(css, /\[data-reveal\][^{]*\{/, 'markup alone never hides a section: only the .reveal class, which page.js adds');
   assert.match(css, /@media \(prefers-reduced-motion: reduce\) \{ \.reveal \{ opacity: 1; transform: none; \} \}/);
-  assert.equal([...html.matchAll(/data-reveal/g)].length, 4, 'agent, how it works, scanner, limits');
+  assert.equal([...html.matchAll(/data-reveal/g)].length, 5, 'agent, how it works, mainnet, scanner, limits');
 });
 
 test('the agent rows ship showing, so the story reads without script; mountAgent is what puts them to wait', () => {
