@@ -18,6 +18,12 @@ AI agents sign calls to contracts by address; the code behind an address can cha
 - **Prompt-injection attack demo, log shown:** `make -C guard demo` ([the log](#the-attack-demo-and-its-log)); the same attack on testnet: [docs/testnet-demo.md](docs/testnet-demo.md).
 - **Recorded real-model testnet runs:** [10 runs](#a-locally-run-model-as-the-agent), the model followed the injected page in 8; before signing, the guard turned those 16 injected calls into 8 blocks and 8 warns declined for lack of a human approver, so nothing was signed for any of them: [raw record](docs/testnet-llm-runs.txt).
 
+**For the agents track (Agent Economy)**
+
+- `GuardedAgent` in [`guard/`](guard) refuses to sign a call to code the registry marks Unsafe, and asks a human before it signs unaudited code.
+- The read-only MCP tool `preflight_check_contract` ([guard/mcp/README.md](guard/mcp/README.md)) lets any MCP client ask the same question, no key needed.
+- On testnet, in 10 recorded runs a real model followed the injected page in 8; those 16 injected calls led to 0 signatures ([raw record](docs/testnet-llm-runs.txt)).
+
 ## Try it in 60 seconds
 
 No key, no Rust. You need `make`, Node.js 22.22.2 or newer with npm, and network access for the first two:
@@ -70,6 +76,14 @@ Every run, every transaction and how the page was arrived at: [docs/model-runs.m
 1. The **scanner** reads a contract's Rust source and reports known vulnerability patterns, each with a stable rule id. 26 rules, PF001 to PF026 ([table](#the-26-rules)). Each rule has a vulnerable and a patched fixture contract and a sandbox exploit that works on the first and fails on the second.
 2. The **registry** is a NEAR contract in [`registry/`](registry). An account on its allowlist (fixed when the registry is created) publishes the verdict for an exact build, keyed by the SHA-256 of the deployed wasm.
 3. The agent's **guard** ([`guard/`](guard)) fetches the deployed code over RPC, hashes it, reads the registry and returns `allow`, `warn` or `block` before the agent signs. `GuardedAgent` refuses to sign on `block`, asks a human on `warn` (unaudited code, or code swapped since its audit), and writes a log line for every decision before it signs.
+
+![The account check on shop-vulnerable.preflight-guard.testnet: BLOCK with rule PF001, the code fingerprint, the verdict published by the auditor and a link to its report.](docs/img/account-check-block.png)
+
+*The account check on the live page, for a demo shop with a published PF001 verdict: BLOCK, read from the testnet chain, with a link to the report.*
+
+![The scanner's GitHub tab after scanning near/near-sdk-rs, sub-path examples/lockable-fungible-token: 4 high and 3 medium findings, the first one PF002.](docs/img/github-scan-findings.png)
+
+*The scanner on real NEAR code: the GitHub tab's built-in example (`near/near-sdk-rs`, `examples/lockable-fungible-token`) gives 4 high and 3 medium findings (pattern matches to review, not confirmed exploits).*
 
 Also here: `preflight account` ([docs](docs/check-a-deployed-contract.md)), which checks an already deployed contract with no source, and [`web/`](web), the page that runs the scanner in your browser.
 
@@ -185,7 +199,7 @@ Adding a rule: [SPEC.md](SPEC.md). Library versions: [docs/getting-started.md](d
 
 ## How this was built
 
-Built at NEAR HACKATHON (tracks: AI Security & Defense, Open Innovation). The hackathon's development window runs from 2026-11-01 to 2026-11-14, and code written since the announcement on 2026-10-19 counts ([HACKATHON.md](https://nearhackathon.com/HACKATHON.md), Q-001). The first commit of this project, in the private repository, is dated 2026-11-10, inside that window. All code, tests and documentation were written by AI agents (Claude Fable 5.2, Claude Opus 5.5 and Claude Sonnet 5.5, Anthropic), directed by one human. Development happened in a private repository, so this public repository starts from one squashed commit and its history does not show the work.
+Built at NEAR HACKATHON (tracks: AI Security & Defense, Agent Economy, Open Innovation). The hackathon's development window runs from 2026-11-01 to 2026-11-14, and code written since the announcement on 2026-10-19 counts ([HACKATHON.md](https://nearhackathon.com/HACKATHON.md), Q-001). The first commit of this project, in the private repository, is dated 2026-11-10, inside that window. All code, tests and documentation were written by AI agents (Claude Fable 5.2, Claude Opus 5.5 and Claude Sonnet 5.5, Anthropic), directed by one human. Development happened in a private repository, so this public repository starts from one squashed commit and its history does not show the work.
 
 What you can check: `make test` runs the scanner, exploit, guard and web tests, and CI runs it on every push (badge at the top); `make -C guard testnet-verify` checks the testnet deployment against the chain. The model runs are recordings, not tests.
 

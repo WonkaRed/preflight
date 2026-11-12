@@ -67,6 +67,7 @@ test('the examples are valid accounts, 3 or 4 of them, from the public survey pl
   }
   assert.deepEqual(EXAMPLES.filter((e) => e.network === 'testnet').map((e) => e.accountId), ['shop-vulnerable.preflight-guard.testnet', SWAP_CONFIG.chameleonId]);
   assert.ok(EXAMPLES.some((e) => e.network === 'mainnet'));
+  assert.deepEqual(EXAMPLES.map((e) => e.accountId), ['shop-vulnerable.preflight-guard.testnet', 'wrap.near', 'v2.ref-finance.near', SWAP_CONFIG.chameleonId], 'the first chip a visitor presses shows a BLOCK, then the other three in their order');
 });
 
 test('the networks: mainnet answers from two endpoints, testnet is the Swap\'s, and every endpoint is https', () => {

@@ -251,3 +251,10 @@ test('a problem renders its title, each line and the hint as text', () => {
   walk(P.renderProblem(doc, 'T <b>', ['one <i>', 'two'], 'hint'), (n) => n.text !== undefined && texts.push(n.text));
   assert.deepEqual(texts, ['T <b>', 'one <i>', 'two', 'hint']);
 });
+
+test('a finding title keeps an attribute like #[private] whole, so a narrow screen never breaks it after the "#"', () => {
+  const doc = fakeDocument();
+  const title = P.titleNodes(doc, 'Callback not marked #[private] anywhere');
+  assert.deepEqual(title.map((n) => (typeof n === 'string' ? n : `${n.attrs.class}:${n.kids[0].text}`)), ['Callback not marked ', 'nobreak:#[private]', ' anywhere']);
+  assert.deepEqual(P.titleNodes(doc, 'No attribute here'), ['No attribute here']);
+});

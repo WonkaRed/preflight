@@ -1,9 +1,9 @@
-// Puts the chameleon back on the patched build when it has sat on the vulnerable build for more than 10 minutes with no
+// Puts the chameleon back on the patched build when it has sat on the vulnerable build for more than 5 minutes with no
 // swap in that time, so the next visitor to the web page arrives to a contract that is fine (ALLOW from both checks) and
 // watches the swap to the vulnerable build turn Preflight to BLOCK while the address check keeps saying ALLOW, and not on a
 // state a previous visitor left. Run it on a timer (systemd/preflight-swap-idle-reset.timer).
 //
-//   PREFLIGHT_TESTNET_KEYS=<dir> npm run idle-reset [-- --idle-minutes 10] [--dry-run]       (or: make -C demo/swap idle-reset)
+//   PREFLIGHT_TESTNET_KEYS=<dir> npm run idle-reset [-- --idle-minutes 5] [--dry-run]       (or: make -C demo/swap idle-reset)
 //
 // It signs with the same public flip key the web page uses (<dir>/swap-flip-public.key), so the gas comes from that key's
 // allowance, which the watchdog renews. It sends at most one transaction per run, and it reads the switch and the chain
@@ -18,7 +18,7 @@ import { JsonRpcProvider } from "near-api-js";
 import { DEFAULT_TESTNET_RPC, assertTestnetChain, chainCodeHash, explorerTxUrl, keyPath, loadSwapDeployment, readSecretKey, sendFlip, switchStatus } from "./lib.ts";
 import type { SwapDeployment } from "./lib.ts";
 
-const DEFAULT_IDLE_MINUTES = 10;
+const DEFAULT_IDLE_MINUTES = 5;
 const FLIP_KEY_FILE = "swap-flip-public";
 
 let values;

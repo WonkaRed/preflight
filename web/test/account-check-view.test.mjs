@@ -221,7 +221,7 @@ test('an example fills the name, picks its network and runs the check; while it 
   assert.deepEqual(chips.map((c) => c.attrs['data-account']), EXAMPLES.map((e) => e.accountId));
   assert.ok(chips.every((c) => c.kids.length === 2), 'name and caption');
 
-  click(chips[0]); // wrap.near on mainnet, held up
+  click(chips[1]); // wrap.near on mainnet, held up (the first chip is the testnet shop)
   assert.equal(els['check-account'].value, 'wrap.near');
   assert.equal(radios[0].checked, true);
   assert.equal(els['check-go'].disabled, true);

@@ -113,7 +113,7 @@ export function mountAgent(doc, { calm = false, now = () => Date.now(), schedule
   }
 
   const paintSource = (el, source, text) => { el.textContent = SOURCE[source]; el.setAttribute('data-source', source); el.setAttribute('title', text); };
-  const paintHash = (el, hash) => { el.textContent = hash; el.setAttribute('title', hash); };
+  const paintHash = (el, hash) => { el.textContent = hash; el.disabled = false; el.setAttribute('title', hash); };
   function paintToday(today) {
     if (!today) return;
     els.todayWord.textContent = today.word;

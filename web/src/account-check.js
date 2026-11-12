@@ -22,12 +22,12 @@ export const NETWORKS = {
 // The registry lives on testnet. A code hash is the same on every network, so the verdict lookup is the same for either.
 export const REGISTRY = { rpcUrls: SWAP_CONFIG.rpcUrls, accountId: SWAP_CONFIG.registryId };
 
-/** One-click examples, one per guard answer: two mainnet rows of docs/mainnet-survey.md (no verdict yet: warn), the demo shop with a
- * published PF001 verdict (block) and the chameleon (allow, block after a swap). A test keeps the mainnet ones in the survey. */
+/** One-click examples, one per guard answer: the demo shop with a published PF001 verdict (block) first, so the first press shows a refusal, then two
+ * mainnet rows of docs/mainnet-survey.md (no verdict yet: warn) and the chameleon (allow, block after a swap). A test keeps the mainnet ones in the survey. */
 export const EXAMPLES = [
+  { accountId: 'shop-vulnerable.preflight-guard.testnet', network: 'testnet', caption: 'A shop Preflight flagged' },
   { accountId: 'wrap.near', network: 'mainnet', caption: 'Wrapped NEAR' },
   { accountId: 'v2.ref-finance.near', network: 'mainnet', caption: 'Ref Finance exchange' },
-  { accountId: 'shop-vulnerable.preflight-guard.testnet', network: 'testnet', caption: 'A shop Preflight flagged' },
   { accountId: SWAP_CONFIG.chameleonId, network: 'testnet', caption: 'The demo chameleon' },
 ];
 

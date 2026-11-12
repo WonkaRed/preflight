@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import { REPO_TREE_URL } from '../src/config.js';
 import { NETWORKS } from '../src/account-check.js';
 import { parseRecorded } from '../src/swap.js';
+import { AGENT_IDS, CALL } from '../src/swap-agent.js';
 import { SWAP_CONFIG } from '../src/swap-config.js';
 import { mainnetSurvey, recordedSwaps, siteData } from '../tools/site-data.mjs';
 import { DIST } from './helpers.mjs';
@@ -121,16 +122,26 @@ test('the agent panel says plainly that it is scripted, sends nothing, and links
   assert.match(html, /id="swap-title"><span>The address never changes\.<\/span> <span>The code does\.<\/span><\/h1>\s*<p class="swap-lede">AI agents pay smart contracts by their address\. The owner can often swap the code behind that address\. Preflight checks the code, not the address\./);
   assert.match(html, /This scripted agent is shown holding a key that can spend\. My testnet agent holds only function-call keys, which can attach no deposit; the guard check is the same\./);
   // The first screen is plain words; the technical wording stays reachable.
-  assert.match(html, /<h2>An <span class="more">address <\/span>allowlist<\/h2>[\s\S]*?<p class="card-sub">What agent wallets check today: the name, not the code<\/p>/);
+  assert.match(html, /<h2>An <span class="more">address <\/span>allowlist<\/h2>[\s\S]*?<p class="card-sub">What an address allowlist checks: the name, not the code<\/p>/);
+  assert.doesNotMatch(html, /agent wallets check today/);
   assert.match(html, /<p class="card-sub">Looks at the code that is live right now<\/p>/);
   assert.match(html, /<span[^>]*>Code fingerprint<\/span><button type="button" class="hash" id="pf-hash"/);
   assert.match(html, /The left card is a real baseline, not a strawman: an address allowlist is what agent wallets and NEAR function-call keys scoped to one contract already give you\. It is not a model of any particular wallet or agent\./);
   for (const caption of ["The agent's job", 'It reads a web page', 'The agent is about to pay', 'Preflight checks the code first']) assert.match(html, new RegExp(`<h3>${caption}</h3>`));
   assert.match(html, /<b>The page hides an order\.<\/b>/);
-  assert.match(html, /and the registry says <b id="agent-verdict">/);
+  assert.match(html, /and the registry says <b id="agent-verdict">[^<]/);
   assert.match(html, /<details class="tech">\s*<summary>Technical detail<\/summary>\s*<p><span class="tag" id="pf-tag">PF001<\/span> <span id="pf-tech">/);
   assert.match(html, /<p class="swap-hint" id="swap-hint">/);
   assert.doesNotMatch(read(SRC, 'swap-agent.js'), /fetch\(|sendBeacon|XMLHttpRequest|WebSocket|signTransaction|send_tx/, 'the panel makes no request and signs nothing');
+});
+
+test('the agent panel reads in full before the script has run: every text slot ships real words, and the static ones are true without the chain', () => {
+  const slot = (id) => html.match(new RegExp(`<(?:code|b|span|p|button|pre)\\b[^>]*\\bid="${id}"[^>]*>([^<]*)<`))?.[1];
+  const texts = ['inject', 'call', 'todayWord', 'todaySrc', 'todayLine', 'todayHash', 'todayVerdict', 'src', 'word', 'line', 'why', 'hash', 'verdict', 'log', 'note'];
+  for (const name of texts) assert.match(slot(AGENT_IDS[name]) ?? '', /\S/, `#${AGENT_IDS[name]} ships empty: a reader without the script gets a blank in its sentence`);
+  assert.equal(slot(AGENT_IDS.inject), SWAP_CONFIG.chameleonId);
+  assert.equal(slot(AGENT_IDS.call), `${SWAP_CONFIG.chameleonId}.${CALL.method} with ${CALL.label}`);
+  assert.doesNotMatch(html, /<button[^>]*id="agent-(today-)?hash"(?![^>]*\bdisabled\b)[^>]*>/, 'the placeholder hash is not a copy button until a real hash is painted');
 });
 
 test('the Swap config is either empty, so the page shows the recording, or complete with a recording that parses', () => {

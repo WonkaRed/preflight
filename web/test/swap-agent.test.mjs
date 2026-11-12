@@ -162,6 +162,7 @@ test('the agent\'s rows play on load before the chain has answered; the check an
   advance(ROW_DELAYS[4] - ROW_DELAYS[3]);
   assert.deepEqual(rows(), ['on', 'on', 'on', 'on', 'on']);
   assert.deepEqual([els.get('agent-word').textContent, els.get('agent-out').attrs['data-tone'], els.get('agent-today-word').textContent, els.get('agent-src').textContent], ['REFUSED', 'block', 'ALLOWED', 'Live read']);
+  assert.deepEqual([els.get('agent-today-hash').disabled, els.get('agent-hash').disabled], [false, false], 'a painted hash is a live copy button (the shipped placeholder is disabled)');
   assert.ok(ROW_DELAYS.at(-1) < 5000, 'the whole play is short');
 });
 

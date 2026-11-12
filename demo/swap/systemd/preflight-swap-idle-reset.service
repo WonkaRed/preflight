@@ -1,5 +1,5 @@
 [Unit]
-Description=Preflight Swap idle reset: puts the demo chameleon back on the patched build after 10 idle minutes on the vulnerable one
+Description=Preflight Swap idle reset: puts the demo chameleon back on the patched build after 5 idle minutes on the vulnerable one
 
 [Service]
 Type=oneshot

@@ -204,7 +204,8 @@ a { color: var(--focus); }
 
 .swap-stage { margin-top: 1.2rem; }
 .swap-cards { display: grid; gap: 0.9rem; }
-@media (min-width: 44rem) { .swap-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; } }
+/* Side by side each card keeps its own height: stretched to the taller one, the allowlist card (fewer rows) would show a blank band under "Looked at" once a swap adds rows to the Preflight card. */
+@media (min-width: 44rem) { .swap-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; align-items: start; } }
 
 .card { --c-bg: var(--surface); --c-fg: var(--ink); --c-edge: var(--line); --c-sub: var(--muted); --c-img: none; display: flex; flex-direction: column; padding: clamp(1.1rem, 3vw, 1.5rem); background: var(--c-bg) var(--c-img); color: var(--c-fg); border: 1px solid var(--c-edge); border-radius: 20px; }
 /* The verdict flip is a transform animation; on its own layer it never counts as layout movement. */
@@ -366,6 +367,8 @@ a { color: var(--focus); }
 
 /* Story sections: revealed as they are scrolled to */
 .story { padding-block: clamp(3rem, 9vw, 6rem) 0; }
+/* The agent story follows the "Now watch an agent" link above it, so it needs no section-sized gap of its own. */
+.swap + .agent { padding-top: clamp(1rem, 3vw, 2rem); }
 .story-head h2 { margin: 0; font: 800 clamp(1.9rem, 4.4vw, 3.1rem)/1.04 var(--display); letter-spacing: -0.01em; text-wrap: balance; }
 .story-tech { margin: 0.5rem 0 0; max-width: 38rem; color: var(--muted); font-size: 0.88rem; }
 .story-lead { margin: 0.8rem 0 0; max-width: 38rem; font: 700 1.2rem/1.45 var(--sans); }

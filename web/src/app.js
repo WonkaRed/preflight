@@ -8,7 +8,7 @@ import { RULE_WORDS } from './swap-agent.js';
 import { mountSurvey } from './survey.js';
 import { mountSwap } from './swap-view.js';
 import { mountAccountCheck } from './account-check-view.js';
-import { countBySeverity, h, plural, renderFindings, renderProblem, renderScanning, renderTally, renderVerdict, sortFindings, validate, verdict } from './report.js';
+import { countBySeverity, h, plural, renderFindings, renderProblem, renderScanning, renderTally, renderVerdict, sortFindings, titleNodes, validate, verdict } from './report.js';
 
 const $ = (id) => document.getElementById(id);
 const SOURCE_PATH = 'src/lib.rs';
@@ -109,8 +109,6 @@ async function boot() {
   state.proofOf = (id) => (site.proofs[id] ? { fixture: link(site.proofs[id].fixture), exploit: link(site.proofs[id].exploit) } : null);
 
   // Source tab: an example fills the same box a pasted contract goes in, so editing the example and scanning again needs no extra mode.
-  // A rule title may hold an attribute like #[private]; kept whole, so a narrow tile never breaks it after the "#".
-  const titleNodes = (title) => title.split(/(#\[[^\]\s]*\])/).map((part, i) => (i % 2 ? h(document, 'span', { class: 'nobreak' }, part) : part)).filter((part) => part !== '');
   const exampleLabel = (example, variant) => `${example.rule} ${variant} example`;
   const selectedExample = () => site.examples.find((e) => e.id === document.querySelector('input[name=example]:checked')?.value);
   const selectedVariant = () => document.querySelector('input[name=variant]:checked').value;
@@ -119,7 +117,7 @@ async function boot() {
     const rule = rules.get(example.rule);
     $('examples').append(h(document, 'label', {},
       h(document, 'input', { type: 'radio', name: 'example', value: example.id }),
-      h(document, 'span', { class: `example sev-${rule.severity}` }, h(document, 'b', {}, rule.id), h(document, 'span', {}, ...titleNodes(rule.title)),
+      h(document, 'span', { class: `example sev-${rule.severity}` }, h(document, 'b', {}, rule.id), h(document, 'span', {}, ...titleNodes(document, rule.title)),
         RULE_WORDS[rule.id] && h(document, 'em', {}, `${RULE_WORDS[rule.id][0].toUpperCase()}${RULE_WORDS[rule.id].slice(1)}.`))));
   }
 

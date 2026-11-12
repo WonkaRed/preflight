@@ -208,12 +208,15 @@ function renderProof(doc, proof) {
   return h(doc, 'p', { class: 'proof' }, h(doc, 'b', {}, 'Proof'), item('fixture pair', proof.fixture), item('sandbox exploit test', proof.exploit));
 }
 
+// A title may hold an attribute like #[private]; kept whole, so a narrow screen never breaks it after the "#".
+export const titleNodes = (doc, title) => title.split(/(#\[[^\]\s]*\])/).map((part, i) => (i % 2 ? h(doc, 'span', { class: 'nobreak' }, part) : part)).filter((part) => part !== '');
+
 function renderFinding(doc, f, proof) {
   return h(doc, 'li', {},
     h(doc, 'article', { class: `finding sev-${f.severity}` },
       h(doc, 'div', { class: 'fhead' },
         h(doc, 'span', { class: 'rid' }, f.rule_id),
-        h(doc, 'h3', { class: 'ftitle' }, f.title),
+        h(doc, 'h3', { class: 'ftitle' }, ...titleNodes(doc, f.title)),
         h(doc, 'span', { class: 'badge' }, LABEL[f.severity])),
       h(doc, 'p', { class: 'floc' },
         h(doc, 'code', { class: 'file' }, `${f.file}:${f.line}:${f.column}`),
