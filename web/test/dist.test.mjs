@@ -145,6 +145,16 @@ test('the limits stay in full wording, folded into details; scroll reveal hides 
   assert.equal([...html.matchAll(/data-reveal/g)].length, 5, 'agent, how it works, mainnet, scanner, limits');
 });
 
+test('the mainnet block leads with the point a zero key count cannot make, before the table', () => {
+  const block = html.slice(html.indexOf('id="mainnet-title"'), html.indexOf('id="mainnet-table"'));
+  assert.match(block, /<p class="story-lead">Zero full-access keys does not mean the code cannot change\. A contract can replace its own code through its own logic, or through a DAO that votes on upgrades\./);
+  assert.ok(block.indexOf('story-lead') < block.indexOf('mainnet-sub'), 'the lead comes before the survey sentence');
+});
+
+test('no page text uses an em or en dash or a curly quote', () => {
+  for (const name of ['index.html', 'swap-view.js', 'report.js', 'survey.js']) assert.doesNotMatch(read(SRC, name), /[\u2013\u2014\u2018\u2019\u201C\u201D]/, name);
+});
+
 test('the agent rows ship showing, so the story reads without script; mountAgent is what puts them to wait', () => {
   assert.doesNotMatch(html, /data-state=/);
   assert.match(read(SRC, 'swap-agent.js'), /if \(!calm\) rows\.forEach\(\(_, i\) => setRow\(i, false\)\)/);

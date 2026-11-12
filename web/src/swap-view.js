@@ -17,11 +17,17 @@ const BUG_PLAIN = {
 const BUG_LINE = {
   PF001: 'Any account can call the contract\'s callback directly, so anyone can credit themselves a balance without paying and withdraw what others deposited.',
 };
+// The line beside the swap button. Live, it follows what the visitor is looking at: the fixed code they arrived to (the invitation),
+// the bad code they swapped in, the bad code someone else left behind (the contract is shared), and the fixed code after a swap.
 const HINT = {
-  loading: 'Press it. The code behind this address changes, live.',
+  loading: '',
   resting: 'The code was just swapped. The demo rests a moment between swaps.',
-  live: 'Press it. The code behind this address changes, live.',
   recorded: 'Press it to replay a recorded swap of the code behind this address.',
+  fixed: 'Right now this contract is fine, and both checks say yes. A contract\'s owner can swap its code at any time. Play the owner: swap in the bad code and see which check notices.',
+  fixedAgain: 'The fixed code is back. Swap the bad code in again and watch Preflight react.',
+  bad: 'Same address, new code. The address check cannot tell. Preflight can, because it reads the code.',
+  badLeft: 'Someone left this contract on its bad code, so Preflight says BLOCK while the address check still says ALLOW. Swap in the fixed code, then swap the bad one back, to watch it change.',
+  other: 'Press it. The code behind this address changes, live.',
 };
 
 // How long ago, in the words a visitor would use. Whole units, rounded down; under a minute is "a moment".
@@ -35,6 +41,9 @@ const since = (ms) => {
 const keyFact = (full) => (full === null ? 'The account\'s key list could not be read just now.'
   : full === 0 ? 'Read from the chain just now: this account has no full-access key, and its code still changes, through one of its own methods. That is exactly why Preflight pins the fingerprint instead of trusting keys.'
     : `Read from the chain just now: this account holds ${full} full-access key${full === 1 ? '' : 's'}, and each can deploy new code to it at any time. Preflight pins the fingerprint, so it does not depend on who holds a key.`);
+
+// What the swap button offers, by the build that is live: the owner's move from there.
+const SWAP_LABEL = { patched: 'Swap in the bad code', vulnerable: 'Swap in the fixed code' };
 
 const when = (state) => state.recorded?.recordedAt ?? '';
 
@@ -80,8 +89,13 @@ export function viewModel(state, { now, explorerUrl }) {
   }
 
   const txLink = (hash, text) => (isHash(hash) ? { href: `${explorerUrl}/tx/${hash}`, text } : null);
-  // The code that ran here before the last swap, when Preflight judged it differently: the contrast, shown only from chain data.
-  const prior = mode === 'live' && verdict && state.before && state.before.verdict.decision !== verdict.decision ? state.before : null;
+  // The auditor-free check: no registry, no verdict, only the fingerprint this visitor first saw against the one live now. Live reads only.
+  const change = mode === 'live' ? changedSince(state.arrival, state.codeHash) : null;
+  const pin = change && { ...change, keys: keyFact(state.keys?.codeHash === state.codeHash ? state.keys.full : null) };
+
+  // The code that ran here before the last swap, when Preflight judged it differently: the contrast, from chain data. Only once the code
+  // has changed under this visitor: on arrival the contract reads as what it is now, not as a history.
+  const prior = change && verdict && state.before && state.before.verdict.decision !== verdict.decision ? state.before : null;
   const priorRule = prior?.verdict.ruleIds[0];
   const before = prior && {
     title: `Until ${since(now - prior.swappedAt)}, this same address ran different code.`,
@@ -93,17 +107,14 @@ export function viewModel(state, { now, explorerUrl }) {
     tx: txLink(prior.txHash, 'The swap transaction'),
   };
 
-  // The auditor-free check: no registry, no verdict, only the fingerprint this visitor first saw against the one live now. Live reads only.
-  const change = mode === 'live' ? changedSince(state.arrival, state.codeHash) : null;
-  const pin = change && { ...change, keys: keyFact(state.keys?.codeHash === state.codeHash ? state.keys.full : null) };
-
   const swapping = state.tx !== null && ['pending', 'landing'].includes(state.tx.stage);
   const waitMs = state.waitUntil === null ? 0 : state.waitUntil - now;
   const resting = mode !== 'recorded' && !swapping && waitMs > 0;
   const button = mode === 'recorded' ? { label: 'Replay a recorded swap', disabled: false }
     : swapping ? { label: 'Swapping...', disabled: true }
       : resting ? { label: `Ready in ${Math.ceil(waitMs / 1000)} s`, disabled: true }
-        : { label: before ? 'Swap it back and watch' : 'Swap the code', disabled: mode !== 'live' };
+        : { label: SWAP_LABEL[mode === 'live' ? state.build : null] ?? 'Swap the code', disabled: mode !== 'live' };
+  const liveHint = { patched: change ? HINT.fixedAgain : HINT.fixed, vulnerable: change ? HINT.bad : HINT.badLeft }[state.build] ?? HINT.other;
 
   let tx = null;
   if (replay) tx = replay.txHash ? { text: 'Recorded transaction.', link: txLink(replay.txHash, 'View it on the explorer') } : { text: 'The recording starts here. Each click replays one swap.', link: null };
@@ -127,13 +138,13 @@ export function viewModel(state, { now, explorerUrl }) {
     address: address ?? 'no address yet',
     addressHref: address && isAccountId(address) ? `${explorerUrl}/account/${address}` : null,
     trust: address
-      ? { word: 'ALLOW', note: `This address is on its safe list, so it says yes. Every time${before ? ', even for the code before' : ''}.` }
+      ? { word: 'ALLOW', note: `This address is on its safe list, so it says yes. Every time${change ? ', even though the code behind it just changed' : ''}.` }
       : { word: 'No data', note: '' },
     pf,
     before,
     pin,
     agent: agentScript({ mode, address, verdict, codeHash: pf.hash, at: now, step: replay ? state.replay : 0, before: prior }),
-    hint: (resting ? HINT.resting : HINT[mode]) ?? '',
+    hint: resting && !change ? HINT.resting : mode === 'live' ? liveHint : HINT[mode] ?? '',
     button,
     tx,
     flips: replay ? (state.replay === 0 ? '' : `Recorded swap ${state.replay} of ${state.recorded.steps.length - 1}`) : mode === 'live' && state.flips !== null ? `Swaps so far: ${state.flips}` : '',
@@ -194,7 +205,7 @@ export function paint(doc, els, model, { animate = false } = {}) {
 }
 
 // "Rob it": ties to the same verdict word the Preflight card shows for the build that is live right now.
-const ROB_NARRATIVE = { block: 'This is the code Preflight said BLOCK to.', allow: 'This is the code it allowed.' };
+const ROB_NARRATIVE = { block: 'This is the code Preflight said BLOCK to.', allow: 'This is the fixed code. Try it: the contract should refuse.' };
 const ROB_PLAIN = {
   done: 'A real transaction just forged a balance nobody paid for.',
   refused: 'The fixed code said no. Only the contract itself may run this step.',
@@ -221,7 +232,7 @@ export function robViewModel(robState, pfTone, explorerUrl) {
   const [tone, text] = STATUS[stage] ?? ['none', ''];
   // A finished rob is the page's payoff, so it gets a result block in the verdict cards' own language, not a line of small text.
   const result = {
-    done: { tone: 'block', word: 'ROBBED', figure: { from: nearAmount(before), to: nearAmount(after), unit: 'NEAR' }, plain: ROB_PLAIN.done, own: '', link: txLink },
+    done: { tone: 'block', word: 'ROBBED', figure: { from: nearAmount(before), to: nearAmount(after), unit: 'testnet NEAR' }, plain: ROB_PLAIN.done, own: '', link: txLink },
     refused: { tone: 'allow', word: 'REFUSED', figure: null, plain: ROB_PLAIN.refused, own: `The contract's own words: "${message}"`, link: txLink },
   }[stage] ?? null;
   const TX = {

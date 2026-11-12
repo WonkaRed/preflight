@@ -11,7 +11,7 @@ AI agents sign calls to contracts by address; the code behind an address can cha
 **TL;DR**
 
 - **What it is:** a 26-rule NEAR contract scanner (each rule backed by a sandbox exploit), an on-chain registry of verdicts keyed by code hash, an agent-side guard, and an MCP server. Today the registry only holds verdicts for the demo contracts here; every other contract's code gets a warn, not a block or an allow, until someone audits it.
-- **Live page:** <https://wonkared.github.io/preflight/>. Press Swap the code and watch the verdict change while the normal safety check (an address allowlist) keeps saying ALLOW.
+- **Live page:** <https://wonkared.github.io/preflight/>. You arrive to a contract both checks call fine. Press Swap in the bad code and watch Preflight go from ALLOW to BLOCK while the normal safety check (an address allowlist) keeps saying ALLOW.
 - **Agent-side wrapper:** `GuardedAgent` in [`guard/`](guard) refuses to sign for code that is not allowed. Run `make -C guard testnet-verify` to see its decisions against the live chain.
 - **No auditor needed:** the guard can also tell an agent that a key holder can replace the code at an address, and refuse when the code changed since the agent last approved it ([how](guard/README.md#who-can-replace-the-code-a-check-that-needs-no-auditor)). The live page shows it after a swap: the code changed since you arrived. A read-only look at 10 well-known mainnet contracts, facts only: [docs/mainnet-survey.md](docs/mainnet-survey.md).
 - **Scoped function-call key, limits explained:** [what it can and cannot do](guard/README.md#function-call-access-keys-what-they-can-and-cannot-do), made with `npm run scope-key` in `guard/`; the testnet agent holds only such keys ([below](#the-agents-key)).

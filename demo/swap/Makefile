@@ -41,6 +41,6 @@ check:
 watchdog:
 	npm run --silent watchdog
 
-# Puts the chameleon back on the vulnerable build when it has been on the patched build for 10 idle minutes; needs PREFLIGHT_TESTNET_KEYS.
+# Puts the chameleon back on the patched build when it has been on the vulnerable build for 10 idle minutes; needs PREFLIGHT_TESTNET_KEYS.
 idle-reset:
 	npm run --silent idle-reset

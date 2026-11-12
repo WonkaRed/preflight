@@ -238,6 +238,13 @@ test('control and bidirectional characters in scan text are replaced, never rend
   assert.ok(rendered.includes('a\uFFFDb\uFFFDc\uFFFDd\uFFFD\ne\tf'), 'newline and tab stay, carriage return does not');
 });
 
+test('a finding\'s fix reads as "Fix", a space, then the help text, so copied text is not "Fixadd"', () => {
+  const doc = fakeDocument();
+  const texts = [];
+  walk(P.renderFindings(doc, [{ ...finding('high'), help: 'add the guard' }], new Set())[0], (n) => n.text !== undefined && texts.push(n.text));
+  assert.ok(texts.join('').includes('Fix add the guard'), texts.join('|'));
+});
+
 test('a problem renders its title, each line and the hint as text', () => {
   const doc = fakeDocument();
   const texts = [];

@@ -30,11 +30,12 @@ test('V live: the allowlist says ALLOW, Preflight says BLOCK with PF001, the has
   assert.equal(m.addressHref, `${EXPLORER}/account/chameleon.example.testnet`);
   assert.equal(m.trust.word, 'ALLOW');
   assert.equal(m.trust.note, 'This address is on its safe list, so it says yes. Every time.');
-  assert.equal(m.hint, 'Press it. The code behind this address changes, live.');
+  assert.equal(m.hint, 'Someone left this contract on its bad code, so Preflight says BLOCK while the address check still says ALLOW. Swap in the fixed code, then swap the bad one back, to watch it change.');
+  assert.equal(m.button.label, 'Swap in the fixed code');
   assert.deepEqual([m.pf.tone, m.pf.word, m.pf.rules, m.pf.build, m.pf.hash], ['block', 'BLOCK', 'PF001', 'Vulnerable build', HASH.vulnerable]);
   assert.equal(m.pf.line, 'This code has a hole: anyone can give themselves a balance and take what other people deposited.');
   assert.match(m.pf.tech, /Any account can call the contract's callback directly, so anyone can credit themselves a balance without paying/);
-  assert.deepEqual(m.button, { label: 'Swap the code', disabled: false });
+  assert.deepEqual(m.button, { label: 'Swap in the fixed code', disabled: false });
   assert.equal(m.flips, 'Swaps so far: 3');
 });
 
@@ -61,10 +62,10 @@ test('countdown: the button is disabled and counts down in whole seconds, never 
   const { state, chain } = await liveState('vulnerable', (c) => { c.nextFlipMs = c.nowMs + 6000; });
   assert.deepEqual(view(state, chain.nowMs).button, { label: 'Ready in 7 s', disabled: true });
   assert.deepEqual(view(state, chain.nowMs + 6001).button, { label: 'Ready in 1 s', disabled: true });
-  assert.deepEqual(view(state, chain.nowMs + 7000).button, { label: 'Swap the code', disabled: false });
+  assert.deepEqual(view(state, chain.nowMs + 7000).button, { label: 'Swap in the fixed code', disabled: false });
   assert.equal(view(state, chain.nowMs).tx, null);
   assert.equal(view(state, chain.nowMs).hint, 'The code was just swapped. The demo rests a moment between swaps.', 'true for a visitor who never swapped');
-  assert.equal(view(state, chain.nowMs + 7000).hint, 'Press it. The code behind this address changes, live.', 'the line is gone with the countdown');
+  assert.match(view(state, chain.nowMs + 7000).hint, /^Someone left this contract on its bad code/, 'the line is gone with the countdown');
 });
 
 test('pending: the button is disabled while signing, sending and waiting for the deploy; the tx link appears once the hash is known', async () => {
@@ -243,18 +244,19 @@ async function fixedLive(minutes, mutate = () => {}) {
   const hash = '3541qCoM1J96ifJZ2PiYFkHUXH4TAyAHPAZjS1RtMsEp';
   const live = await liveState('patched', (chain) => { chain.lastFlipMs = chain.nowMs - minutes * MINUTE; chain.swapTx = { hash, result: flipTxResult }; mutate(chain); });
   for (let wait = 0; wait < 100 && live.swap.getState().before?.txHash === null; wait++) await new Promise((resolve) => setImmediate(resolve));
-  return { ...live, state: live.swap.getState(), hash };
+  // A visitor who arrived while the vulnerable build was live: the code under them changed.
+  return { ...live, state: { ...live.swap.getState(), arrival: HASH.vulnerable }, hash };
 }
 
-test('fixed code live: the first screen still shows the contrast, from the registry and the chain, and offers to swap it back', async () => {
+test('fixed code live after the code changed under the visitor: the contrast from the registry and the chain, and the offer to swap the bad code in again', async () => {
   const { state, chain, hash } = await fixedLive(5);
   const m = view(state, chain.nowMs);
   assert.deepEqual([m.trust.word, m.pf.word, m.pf.line], ['ALLOW', 'ALLOW', 'This is the fixed code. Preflight says yes.']);
-  assert.equal(m.button.label, 'Swap it back and watch');
-  assert.equal(m.hint, 'Press it. The code behind this address changes, live.');
+  assert.equal(m.button.label, 'Swap in the bad code');
+  assert.equal(m.hint, 'The fixed code is back. Swap the bad code in again and watch Preflight react.');
   assert.equal(m.before.title, 'Until 5 minutes ago, this same address ran different code.');
   assert.deepEqual([m.before.word, m.before.rules, m.before.tone], ['BLOCK', 'PF001', 'block']);
-  assert.equal(m.trust.note, 'This address is on its safe list, so it says yes. Every time, even for the code before.');
+  assert.equal(m.trust.note, 'This address is on its safe list, so it says yes. Every time, even though the code behind it just changed.');
   assert.equal(m.before.reason, 'That code had a hole: anyone can credit themselves a balance.');
   assert.equal(m.before.hash, HASH.vulnerable);
   assert.deepEqual(m.before.tx, { href: `${EXPLORER}/tx/${hash}`, text: 'The swap transaction' });
@@ -276,7 +278,7 @@ test('the contrast has no transaction link until one is found, and is not shown 
   assert.equal(view(state, chain.nowMs).before.tx, null);
   const vulnerable = view((await liveState('vulnerable', (c) => { c.lastFlipMs = c.nowMs - MINUTE; })).state, 0);
   assert.equal(vulnerable.before, null);
-  assert.equal(vulnerable.button.label, 'Swap the code');
+  assert.equal(vulnerable.button.label, 'Swap in the fixed code');
   const replay = view({ mode: 'recorded', reason: 'rpc-down', recorded, replay: 2, address: 'chameleon.example.testnet', before: state.before, tx: null, waitUntil: null }, 0);
   assert.equal(replay.before, null);
   assert.equal(replay.button.label, 'Replay a recorded swap');
@@ -319,6 +321,50 @@ test('the code-changed line appears only when the live code is not the code the 
   assert.equal(view({ ...state, arrival: HASH.patched, mode: 'recorded', reason: 'rpc-down' }).pin, null, 'a recording is not a live read');
 });
 
+test('the note shows in both directions: whenever the live code is not the code the visitor arrived to, and clears when it is back', async () => {
+  const onVulnerable = (await liveState('vulnerable')).state;
+  const onPatched = (await liveState('patched')).state;
+  // Arrived to the fixed build (the landing): nothing to note, then the bad code goes in.
+  assert.equal(view({ ...onPatched, arrival: HASH.patched }).pin, null);
+  const toBad = view({ ...onVulnerable, arrival: HASH.patched });
+  assert.deepEqual([toBad.pin.then, toBad.pin.now], [HASH.patched, HASH.vulnerable]);
+  assert.deepEqual([toBad.pf.word, toBad.trust.word], ['BLOCK', 'ALLOW'], 'Preflight turns to BLOCK, the address check does not move');
+  assert.equal(toBad.trust.note, 'This address is on its safe list, so it says yes. Every time, even though the code behind it just changed.');
+  assert.equal(view({ ...onPatched, arrival: HASH.patched }).pin, null, 'back on the arrival code: the note clears');
+  // Arrived to the vulnerable build (someone else left it there): the fixed code is the change.
+  assert.equal(view({ ...onVulnerable, arrival: HASH.vulnerable }).pin, null);
+  const toFixed = view({ ...onPatched, arrival: HASH.vulnerable });
+  assert.deepEqual([toFixed.pin.then, toFixed.pin.now], [HASH.vulnerable, HASH.patched]);
+});
+
+test('through real swaps from the fixed build: the note shows after the bad code goes in, clears on the way back, and shows again', async () => {
+  const { swap, chain } = await liveState('patched');
+  const note = () => view(swap.getState(), chain.nowMs).pin;
+  assert.equal(note(), null);
+  for (const [build, noted] of [['vulnerable', true], ['patched', false], ['vulnerable', true]]) {
+    chain.nowMs += 60_000;
+    chain.nonce += 1; // a new transaction, not a copy of the last
+    await swap.refresh(); // the switch's rest between swaps is over
+    await swap.flip();
+    assert.equal(swap.getState().build, build);
+    assert.equal(note() !== null, noted, `after the swap to ${build}`);
+  }
+});
+
+test('the first screen: on the fixed build it invites the owner\'s swap, and shows no history; on the bad build left by someone else it still tells the story', async () => {
+  const landing = view({ ...(await fixedLive(11)).state, arrival: HASH.patched }, 0);
+  assert.deepEqual([landing.trust.word, landing.pf.word, landing.before, landing.pin], ['ALLOW', 'ALLOW', null, null], 'both checks say ALLOW and nothing speaks of an earlier build');
+  assert.equal(landing.button.label, 'Swap in the bad code');
+  assert.match(landing.hint, /^Right now this contract is fine, and both checks say yes\. A contract's owner can swap its code at any time\./);
+  assert.equal(landing.trust.note, 'This address is on its safe list, so it says yes. Every time.');
+  const swapped = view({ ...(await liveState('vulnerable')).state, arrival: HASH.patched });
+  assert.match(swapped.hint, /^Same address, new code\. The address check cannot tell/);
+  assert.equal(swapped.button.label, 'Swap in the fixed code');
+  const shared = view((await liveState('vulnerable')).state);
+  assert.match(shared.hint, /^Someone left this contract on its bad code, so Preflight says BLOCK while the address check still says ALLOW/);
+  assert.deepEqual([shared.pin, shared.pf.word, shared.trust.word], [null, 'BLOCK', 'ALLOW']);
+});
+
 test('the key fact is the honest sentence for none, one and several keys, and says so when the list could not be read', async () => {
   const { state } = await liveState('patched');
   const pin = (keys) => view({ ...state, arrival: HASH.vulnerable, keys }).pin.keys;
@@ -344,7 +390,7 @@ test('paint shows the line with the fingerprints as text and the full values as 
 test('the page says it plainly: no auditor needed, the code changed since you arrived, fingerprint then and now', async () => {
   const { readFileSync } = await import('node:fs');
   const html = readFileSync(new URL('../src/index.html', import.meta.url), 'utf8');
-  assert.match(html, /<b>No auditor needed for this one:<\/b> the code changed since you arrived\.<span class="pin-inline"> Fingerprint then <button[^>]*id="pin-then"[^>]*><\/button>, now <button[^>]*id="pin-now"[^>]*><\/button>\.<\/span>/);
+  assert.match(html, /<b>The code changed since you arrived\.<\/b> No auditor needed to see that: the fingerprint is different\.<span class="pin-inline"> Fingerprint then <button[^>]*id="pin-then"[^>]*><\/button>, now <button[^>]*id="pin-now"[^>]*><\/button>\.<\/span>/);
   assert.match(html, /<details class="fold pin-fold">\s*<summary>Why no key list can tell you this<\/summary>/);
   assert.match(html, /<div class="swap-pin" id="swap-pin" hidden>/, 'hidden until there is a change to show');
 });
@@ -355,7 +401,7 @@ test('the Rob it panel under each build: the narrative follows the live verdict,
   const vulnerable = robViewModel(idle, 'block', url);
   assert.deepEqual([vulnerable.narrative, vulnerable.button, vulnerable.status, vulnerable.tx, vulnerable.result], ['This is the code Preflight said BLOCK to.', { label: 'Rob it', disabled: false }, { tone: 'none', text: '' }, null, null]);
   assert.equal(vulnerable.hint, 'One click. One real transaction. No wallet.');
-  assert.equal(robViewModel(idle, 'allow', url).narrative, 'This is the code it allowed.');
+  assert.equal(robViewModel(idle, 'allow', url).narrative, 'This is the fixed code. Try it: the contract should refuse.');
   assert.equal(robViewModel({ ...idle, canAct: false }, 'block', url).button.disabled, true);
 });
 
@@ -366,12 +412,12 @@ test('a robbery is the result block: ROBBED in the block tone, the balance jump 
   const done = { ok: true, canAct: true, stage: 'done', before: String(3048n * YOCTO), after: String(4048n * YOCTO), hash: HASH_TX, message: '' };
   const m = robViewModel(done, 'block', 'https://explorer.example');
   assert.deepEqual(m.result, {
-    tone: 'block', word: 'ROBBED', figure: { from: '3.048', to: '4.048', unit: 'NEAR' }, plain: 'A real transaction just forged a balance nobody paid for.', own: '',
+    tone: 'block', word: 'ROBBED', figure: { from: '3.048', to: '4.048', unit: 'testnet NEAR' }, plain: 'A real transaction just forged a balance nobody paid for.', own: '',
     link: { href: `https://explorer.example/tx/${HASH_TX}`, text: 'View the transaction' },
   });
   assert.deepEqual([m.status, m.tx], [{ tone: 'none', text: '' }, null], 'the result block replaces the small status and sentence');
   const grown = robViewModel({ ...done, before: String(57048n * YOCTO), after: String(58048n * YOCTO) }, 'block', 'https://explorer.example');
-  assert.deepEqual(grown.result.figure, { from: '57.048', to: '58.048', unit: 'NEAR' });
+  assert.deepEqual(grown.result.figure, { from: '57.048', to: '58.048', unit: 'testnet NEAR' });
 });
 
 test('a refusal is the same block in the allow tone: REFUSED, a plain line first, the contract\'s own words second', () => {
@@ -401,7 +447,7 @@ test('paintRob writes the result as text, builds the numbers as separate spans, 
   assert.equal(els.robCard.hidden, false);
   assert.equal(els.robCard.attrs['data-tone'], 'block');
   assert.equal(els.robWord.textContent, 'ROBBED');
-  assert.deepEqual(els.robFigure.kids.map((k) => k.kids[0].text), ['57.048', '\u2192', '58.048', 'NEAR']);
+  assert.deepEqual(els.robFigure.kids.map((k) => k.kids[0].text), ['57.048', '\u2192', '58.048', 'testnet NEAR']);
   const links = [];
   walk(els.robLink, (n) => { if (n.tag === 'a') links.push(n.attrs); });
   assert.deepEqual(links, [{ href: `${EXPLORER}/tx/${HASH_TX}`, target: '_blank', rel: 'noopener noreferrer' }]);

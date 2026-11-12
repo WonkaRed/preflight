@@ -45,6 +45,15 @@
     <p class="swap-tx" id="swap-tx" role="status"></p>
     <p class="swap-detail" id="swap-detail"></p>
 
+    <div class="swap-pin" id="swap-pin" hidden>
+      <p class="pin-line"><b>The code changed since you arrived.</b> No auditor needed to see that: the fingerprint is different.<span class="pin-inline"> Fingerprint then <button type="button" class="hash" id="pin-then" data-copy aria-label="Copy the full code fingerprint (hash) you arrived to"></button>, now <button type="button" class="hash" id="pin-now" data-copy aria-label="Copy the full code fingerprint (hash) live now"></button>.</span></p>
+      <details class="fold pin-fold">
+        <summary>Why no key list can tell you this</summary>
+        <p class="pin-fp">Fingerprint then <button type="button" class="hash" id="pin-fold-then" data-copy aria-label="Copy the full code fingerprint (hash) you arrived to"></button>, now <button type="button" class="hash" id="pin-fold-now" data-copy aria-label="Copy the full code fingerprint (hash) live now"></button>.</p>
+        <p id="pin-keys"></p>
+      </details>
+    </div>
+
     <div class="swap-stage">
       <p class="swap-address"><code id="swap-address">no address yet</code></p>
       <div class="swap-cards">
@@ -71,14 +80,6 @@
             <p>Deployed code: <span id="pf-build"></span>. The fingerprint is the SHA-256 hash of the deployed wasm; the registry stores its verdict under that hash.</p>
           </details>
         </article>
-      </div>
-      <div class="swap-pin" id="swap-pin" hidden>
-        <p class="pin-line"><b>No auditor needed for this one:</b> the code changed since you arrived.<span class="pin-inline"> Fingerprint then <button type="button" class="hash" id="pin-then" data-copy aria-label="Copy the full code fingerprint (hash) you arrived to"></button>, now <button type="button" class="hash" id="pin-now" data-copy aria-label="Copy the full code fingerprint (hash) live now"></button>.</span></p>
-        <details class="fold pin-fold">
-          <summary>Why no key list can tell you this</summary>
-          <p class="pin-fp">Fingerprint then <button type="button" class="hash" id="pin-fold-then" data-copy aria-label="Copy the full code fingerprint (hash) you arrived to"></button>, now <button type="button" class="hash" id="pin-fold-now" data-copy aria-label="Copy the full code fingerprint (hash) live now"></button>.</p>
-          <p id="pin-keys"></p>
-        </details>
       </div>
     </div>
 
@@ -114,7 +115,7 @@
     <p class="swap-next"><a href="#swap-agent">Now watch an agent get told to pay it</a></p>
     <details class="fine">
       <summary>About this demo</summary>
-      <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account I control, so this shows what each check keys on, not that a verdict is right. A timer I run resets the demo to the vulnerable build after 10 idle minutes on the fixed one (no swap in that time). <span id="swap-source"></span></p>
+      <p class="swap-print">The key in this page is public on purpose: it can only call <code>flip</code> on a demo contract and has a small gas allowance. Everything here is NEAR testnet. The registry's auditor is an account I control, so this shows what each check keys on, not that a verdict is right. A timer I run resets the demo to the fixed build after 10 idle minutes on the vulnerable one (no swap in that time), so you arrive to a contract that is fine. <span id="swap-source"></span></p>
       <p class="swap-print">The left card is a real baseline, not a strawman: an address allowlist is what agent wallets and NEAR function-call keys scoped to one contract already give you. It is not a model of any particular wallet or agent.</p>
     </details>
   </section>
@@ -206,6 +207,7 @@
   <section class="mainnet story" id="mainnet" aria-labelledby="mainnet-title" data-reveal>
     <div class="story-head">
       <h2 id="mainnet-title">On mainnet today</h2>
+      <p class="story-lead">Zero full-access keys does not mean the code cannot change. A contract can replace its own code through its own logic, or through a DAO that votes on upgrades. A key count shows only one way in.</p>
       <p class="story-sub" id="mainnet-sub">Well-known NEAR mainnet contracts, read from the chain.</p>
       <p class="story-tech" id="mainnet-read"></p>
     </div>

@@ -219,7 +219,7 @@ function renderFinding(doc, f, proof) {
         h(doc, 'code', { class: 'file' }, `${f.file}:${f.line}:${f.column}`),
         h(doc, 'code', { class: 'item' }, f.item)),
       h(doc, 'p', { class: 'msg' }, f.message),
-      h(doc, 'p', { class: 'fix' }, h(doc, 'b', {}, 'Fix'), f.help),
+      h(doc, 'p', { class: 'fix' }, h(doc, 'b', {}, 'Fix'), ` ${f.help}`),
       proof && renderProof(doc, proof)));
 }
 

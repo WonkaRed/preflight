@@ -147,7 +147,6 @@ a { color: var(--focus); }
 .floc .file { color: var(--ink); font-weight: 600; }
 .msg { margin: 0.6rem 0 0; max-width: 46rem; font-family: var(--sans); font-size: 1.04rem; overflow-wrap: anywhere; white-space: pre-line; }
 .fix { margin: 0.75rem 0 0; padding: 0.55rem 0.8rem; background: var(--wash); border-radius: 8px; overflow-wrap: anywhere; white-space: pre-line; }
-.fix b { margin-right: 0.45rem; }
 
 /* Errors */
 .problem { border: 1px solid var(--critical); border-left-width: 6px; background: var(--surface); border-radius: 10px; padding: 1.4rem 1.5rem; }
@@ -327,6 +326,7 @@ a { color: var(--focus); }
 .story { padding-block: clamp(3rem, 9vw, 6rem) 0; }
 .story-head h2 { margin: 0; font: 800 clamp(1.9rem, 4.4vw, 3.1rem)/1.04 var(--sans); letter-spacing: -0.04em; text-wrap: balance; }
 .story-tech { margin: 0.5rem 0 0; max-width: 38rem; color: var(--muted); font-size: 0.88rem; }
+.story-lead { margin: 0.8rem 0 0; max-width: 38rem; font: 700 1.2rem/1.45 var(--sans); }
 .story-sub { margin: 0.8rem 0 0; max-width: 38rem; color: var(--muted); font: 1.15rem/1.5 var(--sans); }
 .agent-note { margin: 0.8rem 0 0; color: var(--muted); font-size: 0.92rem; line-height: 1.5; }
 .agent-note b { color: var(--ink); }

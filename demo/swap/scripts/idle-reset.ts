@@ -1,6 +1,7 @@
-// Puts the chameleon back on the vulnerable build when it has sat on the patched build for more than 10 minutes with no
-// swap in that time, so the next visitor to the web page opens on the contrast (ALLOW from an address check, BLOCK from
-// Preflight) and not on a state a previous visitor left. Run it on a timer (systemd/preflight-swap-idle-reset.timer).
+// Puts the chameleon back on the patched build when it has sat on the vulnerable build for more than 10 minutes with no
+// swap in that time, so the next visitor to the web page arrives to a contract that is fine (ALLOW from both checks) and
+// watches the swap to the vulnerable build turn Preflight to BLOCK while the address check keeps saying ALLOW, and not on a
+// state a previous visitor left. Run it on a timer (systemd/preflight-swap-idle-reset.timer).
 //
 //   PREFLIGHT_TESTNET_KEYS=<dir> npm run idle-reset [-- --idle-minutes 10] [--dry-run]       (or: make -C demo/swap idle-reset)
 //
@@ -64,11 +65,11 @@ async function snapshot(deployment: SwapDeployment): Promise<Snapshot> {
   return { onChain, recorded: status.live, idleMs: nowMs - status.last_flip_ms, flips: status.flips };
 }
 
-/** Why there is nothing to do, or null when the chameleon should be put back: patched, recorded as patched, and quiet for long enough. */
+/** Why there is nothing to do, or null when the chameleon should be put back: vulnerable, recorded as vulnerable, and quiet for long enough. */
 function reasonToWait(state: Snapshot): string | null {
   if (state.onChain === "unknown") return "the chain runs a build this script does not know";
-  if (state.onChain === "vulnerable") return "the vulnerable build is live";
-  if (state.recorded !== "patched") return "a swap is still landing";
+  if (state.onChain === "patched") return "the patched build is live";
+  if (state.recorded !== "vulnerable") return "a swap is still landing";
   if (state.idleMs <= idleMinutes * 60_000) return `a swap ran ${Math.round(state.idleMs / 1000)} s ago, inside the ${idleMinutes} minutes`;
   return null;
 }
@@ -100,13 +101,13 @@ try {
   try {
     const { hash } = await sendFlip(rpc, deployment.switch, secretKey);
     const after = await snapshot(deployment);
-    console.log(line("RESET to the vulnerable build", describe(second), `tx=${hash} ${explorerTxUrl(hash)}`, `now: ${describe(after)}`));
-    process.exit(after.onChain === "vulnerable" ? 0 : 1);
+    console.log(line("RESET to the patched build", describe(second), `tx=${hash} ${explorerTxUrl(hash)}`, `now: ${describe(after)}`));
+    process.exit(after.onChain === "patched" ? 0 : 1);
   } catch (error) {
     // A visitor's swap that landed first makes the switch refuse this one as too soon: the goal is met, and nothing was sent twice.
     const message = error instanceof Error ? error.message : String(error);
     const after = await snapshot(deployment);
-    if (/too soon/.test(message) && after.onChain === "vulnerable") {
+    if (/too soon/.test(message) && after.onChain === "patched") {
       console.log(line("OK skipped", describe(after), "a visitor swapped first; this flip was refused as too soon"));
       process.exit(0);
     }
