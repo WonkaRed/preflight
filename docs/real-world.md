@@ -274,3 +274,82 @@ What the scanner still gets wrong, one line each, so nobody reads a silent resul
 - PF022: locals are tracked by name over the whole function, so a storage-cost local that is reassigned (`cost = amount.0;`), or one rebound in an inner block (`let used = { let cost = storage..; cost };` after an outer `let cost = amount.0;`), is not told apart from the outer one; that can hide a real wrap or report a safe subtraction. For an account that holds locked stake, the balance-minus-storage exemption hides a real wrap (module doc of the rule).
 - Test scope: an item gated by `cfg(feature = "test")` is dropped on the assumption it is test-only; a project that uses that feature name for production code has it skipped.
 - A store or fetch made inside a helper rather than the exported method (PF008) is not seen.
+
+## Held-out check
+
+The 14 repositories above are the ones the rules were narrowed on: I read their false findings, changed the rules, and counted again on the same code. So 90 findings, 17 percent false, says how well the rules fit that corpus, not how they do on code they have never met. This section is the measurement on code they have not: 8 other repositories, chosen before the first scan, scanned by the same binary, triaged with the same three verdicts. Nothing was tuned afterwards and no repository was dropped.
+
+Run it yourself:
+
+```
+tools/realworld/scan.sh <workdir> heldout
+```
+
+The script reads `tools/realworld/heldout-repos.tsv` and `tools/realworld/heldout-triage.tsv` instead of `repos.tsv` and `triage.tsv`, and the per-finding rows come from `tools/realworld/heldout-triage.local.tsv`, which is gitignored for the same reason as the other one. The checks are the ones above. Use a work directory of its own.
+
+### How the 8 were chosen
+
+I wrote this down before scanning anything. The pool is every public repository, not a fork, with Rust as its main language, that GitHub repository search returned among the top 30 by stars for 22 fixed queries (near-protocol, nearprotocol, near smart contract, near contracts, near defi, near nft, near dao, near staking, near dex, near lending, near bridge, near marketplace, near amm, near oracle, near-sdk, near-sdk-rs, near_sdk, nearsdk, near contract, near launchpad, near vault, near escrow), plus the projects I looked up by name. A repository stays if:
+
+- a `Cargo.toml` in it depends on `near-sdk`;
+- at least 1000 lines of non-test Rust are in files that carry `#[near]` or `#[near_bindgen]`, so a library, a tool, a template, a course or a tutorial does not count;
+- its owner is not an owner of a repository in `repos.tsv`, and not the `near`, `near-ndc`, `near-daos`, `aurora-is-near` or `Near-One` organisations, which are the teams behind several of those 14;
+- no other repository of the same owner is already in.
+
+The 8 with the most stars were taken (a tie broken by name), and the next 3 were written down as a reserve in case one failed to clone or held no contract. None of the reserve was used. The commit is the head of the default branch on 2026-11-12.
+
+Projects I knew by name were looked up as well (skyward, ref-finance, sweat, tonic, jumbo, here, meteor, namesky). Skyward is in. For the rest I found no repository of a contract under the path I tried, or only one below the size cut, or one that ranks below eighth by stars, so the rule leaves them out. The corpus is what the rule gives, and it leans old: 4 of the 8 were last changed in 2023 or before.
+
+### What was scanned
+
+skyward, quickjs-near, chainlink-near, devhub, octopus-registry, oysterpack, outlayer, potlock (commits in `heldout-repos.tsv`). 386 files were scanned and 47 test files skipped.
+
+### Result
+
+57 findings: 11 TRUE, 26 DEFENSIBLE, 20 FALSE. The false share is 35 percent, against 17 percent on the 14.
+
+| rule | findings | TRUE | DEFENSIBLE | FALSE |
+|---|---|---|---|---|
+| PF001 | 2 | 1 | 1 | 0 |
+| PF002 | 1 | 0 | 1 | 0 |
+| PF007 | 2 | 0 | 0 | 2 |
+| PF008 | 19 | 3 | 0 | 16 |
+| PF011 | 5 | 4 | 1 | 0 |
+| PF012 | 7 | 0 | 7 | 0 |
+| PF013 | 2 | 0 | 0 | 2 |
+| PF015 | 12 | 2 | 10 | 0 |
+| PF020 | 4 | 0 | 4 | 0 |
+| PF022 | 2 | 0 | 2 | 0 |
+| PF026 | 1 | 1 | 0 | 0 |
+
+Eleven of the 26 rules reported something. The other 15 reported nothing, which says they did not fire here, not that the code is clean. As before, TRUE means the pattern is in the pinned source and nothing more, and no finding is attributed to a project in this document.
+
+### Against the 14
+
+| | 14 repositories | 8 held out |
+|---|---|---|
+| findings | 90 | 57 |
+| TRUE | 10 (11 percent) | 11 (19 percent) |
+| DEFENSIBLE | 65 (72 percent) | 26 (46 percent) |
+| FALSE | 15 (17 percent) | 20 (35 percent) |
+
+The scanner is less precise on code it was not narrowed on, by about a factor of two. I do not think the 17 percent figure was made up, but it was measured where the rules had been fitted, and 35 percent is the better estimate of what a new repository gets. Three things in the table are worth saying plainly:
+
+- One rule is the noise. PF008 is 16 of the 20 false findings, and 16 of its 19 findings are false (84 percent; it was 10 of 16 on the 14). Leave PF008 out and the false share is 4 of 38, 11 percent, against 5 of 74, 7 percent, on the 14. The rules other than PF008 held up about as well as they did on the corpus they were fitted to, a little worse.
+- The false findings are concentrated. 3 of the 8 repositories hold all 20; the other 5 hold none. With 8 repositories, one large codebase moves the share a lot, so read 35 percent as a rough figure.
+- The mix of verdicts moved: DEFENSIBLE fell from 72 to 46 percent because the 14 hold a lot of PF001 and PF022 findings (42 of 65) that a library or example corpus produces and these 8 do not. The TRUE share rose, but 4 of the 11 TRUE are PF011, a rule that reported nothing on the 14.
+
+The false findings have these shapes:
+
+1. A caller restriction the scanner does not read, on PF008: 10 findings. The method panics unless the caller is a DAO member, a moderator, a community admin or a stored role holder, by a set lookup or a stored role, and the rule reports that any account can fill storage. The narrowing on the 14 only recognises a comparison with a field of `self`.
+2. `near_sdk::assert_self()` as a caller check: 4 findings (PF007 twice, PF013 twice). The scanner trusts no function by its name, and this one comes from a library, so it is never a guard to it. The PF001 rule reports the same guard by design, as DEFENSIBLE.
+3. An existing record shrunk, re-keyed or rewritten with a value that is already stored, on PF008: 5 findings. The deposit was proved by the code above the write, or the value is a key just found in a map.
+4. A mock contract in a crate of its own below `tests/`: 1 finding (PF008), shape 1 above again.
+
+The DEFENSIBLE ones are mostly three things. 10 PF015 findings are a native refund to an account after the claim on it was removed, which no rollback can improve. 7 PF012 findings are a floor on purpose: per-million pricing, a buffer size, calendar arithmetic, a percentage of an amount in yoctoNEAR. 4 PF020 findings are a `Default` with an empty owner, where a call before `new` can only make `new` fail and a redeploy fixes it.
+
+### What it says about the scanner
+
+It finds real patterns in code it has not seen: 11 of 57 are TRUE, and only 3 of the 8 repositories produced a false finding at all. One in three findings on new code is wrong, and PF008 is the rule that makes it so: it reports almost every method that stores something and is not payable, and cannot tell a restricted caller from an open one unless the restriction is a comparison with a field of `self`. Until that changes, a PF008 finding is a place to look, not a result. PF011, PF015 and PF026 had no false finding here, and PF011 and PF026 were TRUE in 5 of 6.
+
+What this does not show. It is one author's triage (mine, as with the 14), so the verdicts carry the same bias as before; the corpus has 8 repositories; and the rules fired on 11 of the 26, so the held-out number says nothing about the other 15.

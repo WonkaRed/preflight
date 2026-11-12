@@ -1,0 +1,10 @@
+# Held-out corpus: public near-sdk contract repositories the scanner was never tuned on. Chosen by the rule in docs/real-world.md (Held-out check) before the first scan.
+# name	clone URL	pinned commit	sub-path scanned (. = repository root)
+skyward	https://github.com/skyward-finance/contracts	142e76303ac9d15f4efb7affde4e60896ccddbfb	.
+quickjs-near	https://github.com/petersalomonsen/quickjs-rust-near	047fbb4e66fcc2711c9385b2138845988d95a452	.
+chainlink-near	https://github.com/smartcontractkit/near-protocol-contracts	b9db41f0be2902e24f53137a972139b583ed2f60	.
+devhub	https://github.com/NEAR-DevHub/neardevhub-contract	9bb94872a32e6f7a0769e031726cbf8e6cc4801a	.
+octopus-registry	https://github.com/octopus-network/octopus-appchain-registry	e5e40c259ec7d3ca51724f95bb8fd4669522ea84	.
+oysterpack	https://github.com/oysterpack/oysterpack-near-stake-token	e7cc614da07a2bd0039528edfc9fe21216afcdc9	.
+outlayer	https://github.com/out-layer/outlayer	2d50bfab14389857e6e50e84e76d5652b944e1cc	.
+potlock	https://github.com/PotLock/core	7ffcf91ed26cd1c920263fb363f691f462f90958	.

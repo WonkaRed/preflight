@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Re-runs the real-world scan behind docs/real-world.md.
 #
-#   tools/realworld/scan.sh <workdir>
+#   tools/realworld/scan.sh <workdir> [heldout]
+#
+# With the word heldout the held-out corpus is run instead: heldout-repos.tsv, heldout-triage.tsv and
+# heldout-triage.local.tsv take the place of repos.tsv, triage.tsv and triage.local.tsv. Use a workdir of its own.
 #
 # Shallow-fetches each commit pinned in repos.tsv into <workdir> (a repository already there is reused after its
 # HEAD is checked), scans it with the built scanner, and prints the findings and the test files skipped per
@@ -28,7 +31,12 @@ preflight=${PREFLIGHT:-$root/target/release/preflight}
 
 fail() { echo "scan.sh: $*" >&2; exit 1; }
 
-[ $# -eq 1 ] || fail "usage: tools/realworld/scan.sh <workdir>"
+[ $# -ge 1 ] && [ $# -le 2 ] || fail "usage: tools/realworld/scan.sh <workdir> [heldout]"
+case ${2-} in
+    '') prefix= ;;
+    heldout) prefix=heldout- ;;
+    *) fail "unknown corpus: $2 (the only one besides the default is heldout)" ;;
+esac
 [ -x "$preflight" ] || fail "no scanner at $preflight (run: cargo build --release -p preflight, or set PREFLIGHT)"
 command -v git >/dev/null || fail "git is required"
 command -v jq >/dev/null || fail "jq is required"
@@ -77,7 +85,7 @@ while IFS='	' read -r name url commit sub; do
     skipped_total=$((skipped_total + skipped))
     cat "$work/out/$name.tsv" >> "$found"
     printf '%s\t%s\n' "$(wc -l < "$work/out/$name.tsv")" "$skipped" >> "$per_repo"
-done < "$here/repos.tsv"
+done < "$here/${prefix}repos.tsv"
 
 echo
 printf '%-16s %-9s %s\n' repository findings test-files-skipped
@@ -89,8 +97,8 @@ echo
 echo "total findings: $(wc -l < "$found"), test files skipped: $skipped_total"
 
 sort "$found" > "$work/out/found-keys.tsv"
-local_rows="$here/triage.local.tsv"
-committed="$here/triage.tsv"
+local_rows="$here/${prefix}triage.local.tsv"
+committed="$here/${prefix}triage.tsv"
 [ -r "$committed" ] || fail "cannot read $committed"
 { grep -v '^#' "$committed" || true; } | sort > "$work/out/committed-counts.tsv"
 
@@ -99,12 +107,12 @@ if [ -r "$local_rows" ]; then
     # "repository, file:line, rule", so two findings on one line need two rows.
     { grep -v '^#' "$local_rows" || true; } | cut -f1-3 | sort > "$work/out/triage-keys.tsv"
     bad=$({ grep -v '^#' "$local_rows" || true; } | cut -f4 | grep -vcx 'TRUE\|DEFENSIBLE\|FALSE') || true
-    [ "$bad" -eq 0 ] || { echo "scan.sh: triage.local.tsv has $bad rows whose verdict is not TRUE, DEFENSIBLE or FALSE" >&2; failed=1; }
+    [ "$bad" -eq 0 ] || { echo "scan.sh: ${prefix}triage.local.tsv has $bad rows whose verdict is not TRUE, DEFENSIBLE or FALSE" >&2; failed=1; }
     if [ $failed -eq 0 ]; then
         missing=$(comm -23 "$work/out/found-keys.tsv" "$work/out/triage-keys.tsv") || true
         stale=$(comm -13 "$work/out/found-keys.tsv" "$work/out/triage-keys.tsv") || true
         if [ -n "$missing" ]; then
-            echo "scan.sh: findings with no triage row (add a row to tools/realworld/triage.local.tsv):" >&2
+            echo "scan.sh: findings with no triage row (add a row to tools/realworld/${prefix}triage.local.tsv):" >&2
             echo "  ${missing//$'\n'/$'\n'  }" >&2
             failed=1
         fi
@@ -118,24 +126,24 @@ if [ -r "$local_rows" ]; then
     { grep -v '^#' "$local_rows" || true; } | cut -f3,4 | sort | uniq -c \
         | awk '{ printf "%s\t%s\t%s\n", $2, $3, $1 }' | sort > "$work/out/generated-counts.tsv"
     if ! diff -u "$work/out/committed-counts.tsv" "$work/out/generated-counts.tsv" > "$work/out/counts.diff"; then
-        echo "scan.sh: triage.tsv does not match triage.local.tsv (- committed, + regenerated); copy the data rows from $work/out/generated-counts.tsv" >&2
+        echo "scan.sh: ${prefix}triage.tsv does not match ${prefix}triage.local.tsv (- committed, + regenerated); copy the data rows from $work/out/generated-counts.tsv" >&2
         cat "$work/out/counts.diff" >&2
         failed=1
     fi
     echo
-    echo "triage from triage.local.tsv ($(wc -l < "$work/out/triage-keys.tsv") rows):"
+    echo "triage from ${prefix}triage.local.tsv ($(wc -l < "$work/out/triage-keys.tsv") rows):"
 else
     echo
-    echo "no triage.local.tsv: only the per-rule totals can be checked, against the committed triage.tsv"
+    echo "no ${prefix}triage.local.tsv: only the per-rule totals can be checked, against the committed ${prefix}triage.tsv"
     cut -f3 "$found" | sort | uniq -c | awk '{ printf "%s\t%s\n", $2, $1 }' | sort > "$work/out/found-per-rule.tsv"
     awk -F'\t' '{ sum[$1] += $3 } END { for (rule in sum) printf "%s\t%s\n", rule, sum[rule] }' "$work/out/committed-counts.tsv" \
         | sort > "$work/out/committed-per-rule.tsv"
     if ! diff -u "$work/out/committed-per-rule.tsv" "$work/out/found-per-rule.tsv" > "$work/out/counts.diff"; then
-        echo "scan.sh: findings per rule differ from the committed triage.tsv (- committed, + scanner):" >&2
+        echo "scan.sh: findings per rule differ from the committed ${prefix}triage.tsv (- committed, + scanner):" >&2
         cat "$work/out/counts.diff" >&2
         failed=1
     fi
-    echo "triage from the committed triage.tsv:"
+    echo "triage from the committed ${prefix}triage.tsv:"
 fi
 awk -F'\t' '{ count[$2] += $3 } END { for (verdict in count) printf "  %-12s %s\n", verdict, count[verdict] }' \
     "$work/out/committed-counts.tsv" | sort
@@ -143,8 +151,8 @@ awk -F'\t' '{ count[$2] += $3 } END { for (verdict in count) printf "  %-12s %s\
 if [ $failed -ne 0 ]; then
     echo "scan.sh: FAILED" >&2
 elif [ -r "$local_rows" ]; then
-    echo "every finding has exactly one triage row, and the committed triage.tsv matches those rows"
+    echo "every finding has exactly one triage row, and the committed ${prefix}triage.tsv matches those rows"
 else
-    echo "per-rule finding totals match the committed triage.tsv (per-finding triage not checked: triage.local.tsv is absent)"
+    echo "per-rule finding totals match the committed ${prefix}triage.tsv (per-finding triage not checked: ${prefix}triage.local.tsv is absent)"
 fi
 exit $failed
