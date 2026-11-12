@@ -8,21 +8,19 @@ AI agents sign calls to contracts by address; the code behind an address can cha
 
 *One NEAR testnet address, two checks. The normal safety check (an address allowlist, the real baseline agent wallets and NEAR function-call keys already give you) says ALLOW before and after the swap. Preflight looks the verdict up under the hash of the code deployed right now, so here it goes from ALLOW to BLOCK (PF001) with the code. On the live page the swap is a real testnet transaction; this recording simulates that one transaction and reads everything else from the chain.*
 
+**What a spend cap or an address allowlist cannot see: the code at a trusted address can change.** In a read-only look at 142 mainnet contracts ([docs/mainnet-sweep.md](docs/mainnet-sweep.md)), 32 of them (22.5 percent) held at least one full-access key, which lets whoever holds it replace the code, and 75 (52.8 percent) exported a method named like `upgrade`, `update_contract` or `migrate`. Those count keys and method names, not unsafe contracts (a multisig or a DAO may hold the key), and the 142 are a convenience sample of well-known contracts, not a random draw. An agent that signs by address never sees such a change. Preflight checks the code deployed at the address right now, before the agent signs.
+
+**Check every claim in one command: `make verify`** (guide for reviewers and AI screeners: [VERIFY.md](VERIFY.md)). With Node.js and no Rust, it scans all 26 fixture pairs with the scanner's WebAssembly build, reads the testnet chain, runs the MCP self-check and the offline attack demo, checks the recorded model runs, and prints PASS, FAIL or SKIP for each claim in [`claims.json`](claims.json), in about 10 seconds. The full exploit suite is `make test`, which needs Rust.
+
 **TL;DR**
 
-- **What it is:** a 26-rule NEAR contract scanner (each rule backed by a sandbox exploit), an on-chain registry of verdicts keyed by code hash, an agent-side guard, and an MCP server. Today the registry only holds verdicts for the demo contracts here; every other contract's code gets a warn, not a block or an allow, until someone audits it.
+- **What it is:** a 26-rule NEAR contract scanner (each rule backed by a sandbox exploit), an on-chain registry of verdicts keyed by code hash, an agent-side guard, and an MCP server. Today the registry holds verdicts only for the demo contracts here; any other contract's code gets a warn until someone audits it.
 - **Live page:** <https://wonkared.github.io/preflight/>. You arrive to a contract both checks call fine. Press Swap in the bad code and watch Preflight go from ALLOW to BLOCK while the normal safety check (an address allowlist) keeps saying ALLOW. Type any NEAR account into the box above the scanner to see what the guard would say about paying it, read from the live chain.
 - **Agent-side wrapper:** `GuardedAgent` in [`guard/`](guard) refuses to sign for code that is not allowed. Run `make -C guard testnet-verify` to see its decisions against the live chain.
 - **No auditor needed:** the guard can also tell an agent that a key holder can replace the code at an address, and refuse when the code changed since the agent last approved it ([how](guard/README.md#who-can-replace-the-code-a-check-that-needs-no-auditor)). The live page shows it after a swap: the code changed since you arrived. A read-only look at 10 well-known mainnet contracts, facts only: [docs/mainnet-survey.md](docs/mainnet-survey.md).
 - **Scoped function-call key, limits explained:** [what it can and cannot do](guard/README.md#function-call-access-keys-what-they-can-and-cannot-do), made with `npm run scope-key` in `guard/`; the testnet agent holds only such keys ([below](#the-agents-key)).
 - **Prompt-injection attack demo, log shown:** `make -C guard demo` ([the log](#the-attack-demo-and-its-log)); the same attack on testnet: [docs/testnet-demo.md](docs/testnet-demo.md).
-- **Recorded real-model testnet runs:** [10 runs](#a-locally-run-model-as-the-agent), the model followed the injected page in 8; before signing, the guard turned those 16 injected calls into 8 blocks and 8 warns declined for lack of a human approver, so nothing was signed for any of them: [raw record](docs/testnet-llm-runs.txt).
-
-**For the agents track (Agent Economy)**
-
-- `GuardedAgent` in [`guard/`](guard) refuses to sign a call to code the registry marks Unsafe, and asks a human before it signs unaudited code.
-- The read-only MCP tool `preflight_check_contract` ([guard/mcp/README.md](guard/mcp/README.md)) lets any MCP client ask the same question, no key needed.
-- On testnet, in 10 recorded runs a real model followed the injected page in 8; those 16 injected calls led to 0 signatures ([raw record](docs/testnet-llm-runs.txt)).
+- **Recorded real-model testnet runs:** [10 runs](#a-locally-run-model-as-the-agent), the model followed the injected page in 8; the guard turned those 16 injected calls into 8 blocks and 8 warns declined for lack of a human approver, so none was signed: [raw record](docs/testnet-llm-runs.txt).
 
 ## Try it in 60 seconds
 
@@ -88,6 +86,12 @@ Every run, every transaction and how the page was arrived at: [docs/model-runs.m
 Also here: `preflight account` ([docs](docs/check-a-deployed-contract.md)), which checks an already deployed contract with no source, and [`web/`](web), the page that runs the scanner in your browser.
 
 **MCP.** The guard is also an MCP server: any MCP client (Claude Code, Codex, an agent framework) can ask "is the code at this NEAR address the code an auditor checked?" with the read-only tool `preflight_check_contract`, no key needed. `make -C guard mcp-check` starts it over stdio and gets allow (patched), block (vulnerable, PF001) and warn (swapped) for the three testnet demo contracts, ending with `Self-check passed: patched allow, vulnerable block, swapped warn.` Setup and the guarded-call tool: [guard/mcp/README.md](guard/mcp/README.md).
+
+**For the agents track (Agent Economy)**
+
+- `GuardedAgent` in [`guard/`](guard) refuses to sign a call to code the registry marks Unsafe, and asks a human before it signs unaudited code.
+- The read-only MCP tool `preflight_check_contract` ([guard/mcp/README.md](guard/mcp/README.md)) lets any MCP client ask the same question, no key needed.
+- On testnet, in 10 recorded runs a real model followed the injected page in 8; those 16 injected calls led to 0 signatures ([raw record](docs/testnet-llm-runs.txt)).
 
 ## Why the check lives in the agent, and what an on-chain check adds
 
@@ -161,6 +165,7 @@ Full descriptions, fixtures and exploit tests: [docs/rules.md](docs/rules.md).
 
 ```sh
 git clone https://github.com/WonkaRed/preflight.git && cd preflight
+make verify  # no Rust: every README claim this machine can check, PASS or FAIL each, in seconds
 make test    # scanner, fixtures, registry, every sandbox exploit, then the guard and web tests
 make demo    # scans the PF001 fixture pair and runs its exploit test
 cargo run -p preflight -- path/to/your/contract   # scan your own contract (--json for a machine-readable report)
@@ -193,15 +198,16 @@ web/        Static page: the Swap and the scanner running in the browser (compil
 web-scan/   Rust crate `preflight-web`: the scanner as the page's wasm module.
 demo/swap/  The Swap's contracts, scripts and watchdog.
 docs/       The testnet record, scan reports, recorded runs, and the detail this README links to.
+scripts/    `verify.mjs`, what `make verify` runs; the claims it checks are in `claims.json`.
 ```
 
 Adding a rule: [SPEC.md](SPEC.md). Library versions: [docs/getting-started.md](docs/getting-started.md#built-on).
 
 ## How this was built
 
-Built at NEAR HACKATHON (tracks: AI Security & Defense, Agent Economy, Open Innovation). The hackathon's development window runs from 2026-11-01 to 2026-11-14, and code written since the announcement on 2026-10-19 counts ([HACKATHON.md](https://nearhackathon.com/HACKATHON.md), Q-001). The first commit of this project, in the private repository, is dated 2026-11-10, inside that window. All code, tests and documentation were written by AI agents (Claude Fable 5.2, Claude Opus 5.5 and Claude Sonnet 5.5, Anthropic), directed by one human. Development happened in a private repository, so this public repository starts from one squashed commit and its history does not show the work.
+Built at NEAR HACKATHON (tracks: AI Security & Defense, Agent Economy, Open Innovation). The hackathon's development window runs from 2026-11-01 to 2026-11-14, and code written since the announcement on 2026-10-19 counts ([HACKATHON.md](https://nearhackathon.com/HACKATHON.md), Q-001). The first commit of this project, in the private repository, is dated 2026-11-10, inside that window. All code, tests and documentation were written by AI agents (Claude Fable 5.2, Claude Opus 5.5 and Claude Sonnet 5.5, Anthropic), directed by one human. Development happened in a private repository, so this public repository starts from one squashed commit of the private history; later commits are the public polish.
 
-What you can check: `make test` runs the scanner, exploit, guard and web tests, and CI runs it on every push (badge at the top); `make -C guard testnet-verify` checks the testnet deployment against the chain. The model runs are recordings, not tests.
+What you can check: `make verify` checks the claims above without Rust, and `make test` runs the scanner, exploit, guard and web tests; CI runs both on every push, `make verify` with `--offline` so a testnet outage cannot fail the build (badge at the top). `make -C guard testnet-verify` checks the testnet deployment against the chain. The model runs are recordings, not tests.
 
 Chair ([github.com/WonkaRed/chair](https://github.com/WonkaRed/chair)) is an independent project entered in the same hackathon. The two projects share no code.
 

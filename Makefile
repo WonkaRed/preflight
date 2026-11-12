@@ -8,7 +8,7 @@ MAKEFLAGS += --no-print-directory
 PREFLIGHT = cargo run --locked --quiet -p preflight --
 WASM = --release --target wasm32-unknown-unknown
 
-.PHONY: build test demo
+.PHONY: build test demo verify
 
 build:
 	cargo build --locked --workspace
@@ -34,3 +34,9 @@ demo:
 	@echo
 	@echo '$$ cargo test -p exploits --test pf001_callback'
 	@cargo test --locked -p exploits --test pf001_callback
+
+# Checks every README claim in claims.json that this machine can check, with Node only (no Rust), and prints PASS, FAIL or SKIP
+# for each; see VERIFY.md. The scanner's wasm is web/dist/preflight.wasm if built, else downloaded from the live page.
+# make verify VERIFY_ARGS=--offline skips the claims that need network access.
+verify:
+	node --disable-warning=ExperimentalWarning --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/verify.mjs $(VERIFY_ARGS)

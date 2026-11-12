@@ -10,3 +10,4 @@ dist/
 # Per-finding real-world triage: names third-party files beside verdicts
 tools/realworld/triage.local.tsv
 tools/realworld/heldout-triage.local.tsv
+verify-result.json
